@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>McCoy's Fleet Cost per Mile — YTD 2026</title>
+<style>
+:root{
+  --green:#0d5540; --green-2:#13694f; --green-ink:#0a3f30; --yellow:#ffe901; --yellow-soft:#fff8b8;
+  --bg:#f4f5f2; --surface:#fcfcfb; --line:#e3e5df; --line-2:#cfd3ca;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#7c7b76;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+  --bad:#c0392b; --good:#1e7d32;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-size:14px}
+header{background:var(--green);color:#fff;border-bottom:5px solid var(--yellow)}
+.hwrap{max-width:1500px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:18px}
+.hwrap img{height:52px;border-radius:4px}
+.htitle h1{margin:0;font-size:22px;font-weight:700;letter-spacing:.2px}
+.htitle div{font-size:13px;color:#d6e6dd;margin-top:2px}
+.hright{margin-left:auto;text-align:right;font-size:12px;color:#d6e6dd}
+nav{background:var(--green-ink)}
+nav .nwrap{max-width:1500px;margin:0 auto;padding:0 24px;display:flex;gap:4px}
+nav button{background:none;border:0;color:#cfe0d6;font:inherit;font-weight:600;padding:11px 16px;cursor:pointer;border-bottom:3px solid transparent}
+nav button.on{color:#fff;border-bottom-color:var(--yellow)}
+nav button:hover{color:#fff}
+main{max-width:1500px;margin:0 auto;padding:18px 24px 40px}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:16px}
+.filters label{display:flex;flex-direction:column;font-size:11px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.4px;gap:4px}
+.filters select,.filters input{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;background:#fff;min-width:120px}
+.filters .reset{margin-left:auto}
+.btn{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--green);background:#fff;color:var(--green);padding:6px 12px;border-radius:6px;cursor:pointer}
+.btn:hover{background:var(--green);color:#fff}
+.btn.y{background:var(--yellow);border-color:#d9c500;color:var(--green-ink)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;border-top:4px solid var(--green)}
+.tile.y{border-top-color:var(--yellow)}
+.tile .k{font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.4px}
+.tile .v{font-size:26px;font-weight:700;margin-top:4px;color:var(--green-ink);font-variant-numeric:tabular-nums}
+.tile .s{font-size:12px;color:var(--muted);margin-top:2px}
+.grid2{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+@media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:16px}
+.card h2{margin:0 0 2px;font-size:15px;color:var(--green-ink)}
+.card .sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--text-2);margin:4px 0 6px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.legend i.ln{height:3px;border-radius:2px;width:16px}
+svg text{font-family:inherit}
+.chart{position:relative}
+.tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line-2);border-radius:6px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;min-width:170px;z-index:10}
+.tip b{display:block;margin-bottom:4px;color:var(--green-ink)}
+.tip .r{display:flex;justify-content:space-between;gap:14px}
+.tip .r i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-2);background:#f0f2ec;position:sticky;top:0;cursor:pointer;user-select:none}
+th.l,td.l{text-align:left}
+th.sorted::after{content:" ▾";color:var(--green)}
+th.sorted.asc::after{content:" ▴"}
+tbody tr:hover{background:var(--yellow-soft)}
+tbody tr.click{cursor:pointer}
+tbody tr.sel{background:#fff3a0}
+tfoot td{font-weight:700;background:#eef2ea;border-top:2px solid var(--green)}
+.tscroll{max-height:640px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;background:#e8efe9;color:var(--green-ink)}
+.pill.d{background:#fde7e2;color:#9a2b17}
+.pill.e{background:var(--yellow-soft);color:#6b5d00}
+.est{color:#8a7700;font-style:italic}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.toolbar input{font:inherit;padding:6px 9px;border:1px solid var(--line-2);border-radius:6px;min-width:240px}
+.muted{color:var(--muted)}
+.hide{display:none}
+.notes h3{font-size:14px;margin:16px 0 6px;color:var(--green-ink)}
+.notes p,.notes li{line-height:1.5;color:var(--text-2)}
+.issue td{white-space:normal;text-align:left;vertical-align:top}
+.issue td.list{font-size:11px;color:var(--muted);max-width:520px;word-break:break-word}
+.detail-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.detail-head h2{margin:0}
+footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><div class="hwrap">
+  <img src="__LOGO__" alt="McCoy's Building Supply">
+  <div class="htitle"><h1>Fleet Cost per Mile — YTD 2026</h1><div>Maintenance · fuel · onsite diesel · propane · depreciation · registration &amp; taxes, by location and month</div></div>
+  <div class="hright">Data through <b>Oct 31, 2026</b><br>Built <span id="built"></span></div>
+</div></header>
+<nav><div class="nwrap">
+  <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="locations">Locations</button>
+  <button data-tab="assets">Assets</button>
+  <button data-tab="notes">Data notes &amp; method</button>
+</div></nav>
+<main>
+  <div class="filters">
+    <label>District<select id="fDist"></select></label>
+    <label>Location<select id="fLoc"></select></label>
+    <label>Asset class<select id="fCls"></select></label>
+    <label>From<select id="fFrom"></select></label>
+    <label>To<select id="fTo"></select></label>
+    <label>Assets<select id="fRos"><option value="all">All (incl. disposed)</option><option value="roster">On 10/31 roster</option><option value="disp">Disposed only</option></select></label>
+    <button class="btn reset" id="reset">Reset filters</button>
+  </div>
+
+  <section id="tab-overview">
+    <div class="tiles" id="tiles"></div>
+    <div class="grid2">
+      <div class="card"><h2>Monthly cost by component</h2><div class="sub">Stacked total cost per month. Hover a bar for the breakdown.</div>
+        <div class="legend" id="lgCost"></div><div class="chart" id="chCost"></div></div>
+      <div class="card"><h2>Cost per mile by month</h2><div class="sub">All-in = every fleet cost at the selected locations ÷ truck &amp; LD miles. Hollow markers = more than 5% of that month's miles estimated.</div>
+        <div class="legend" id="lgCpm"></div><div class="chart" id="chCpm"></div></div>
+    </div>
+    <div class="card"><h2>Cost breakdown &amp; run rate</h2><div class="sub">Run rate annualizes the selected months (average month × 12).</div><div id="tblComp"></div></div>
+    <div class="card"><h2>Measures by asset class</h2><div class="sub">Trucks &amp; LD vehicles per mile · forklifts &amp; TMFLs per hour · trailers &amp; ancillary per asset-month.</div><div id="tblCls"></div></div>
+  </section>
+
+  <section id="tab-locations" class="hide">
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0;color:var(--green-ink);font-size:15px">Locations</h2><span class="muted">Click a row for the monthly detail and its assets.</span><span style="flex:1"></span><button class="btn" id="csvLoc">Export CSV</button></div>
+      <div class="tscroll" id="tblLoc"></div>
+    </div>
+    <div class="card hide" id="locDetail"></div>
+  </section>
+
+  <section id="tab-assets" class="hide">
+    <div class="card">
+      <div class="toolbar"><input id="aSearch" placeholder="Search unit #, type, make, location…"><span class="muted" id="aCount"></span><span style="flex:1"></span><button class="btn" id="csvAst">Export CSV</button></div>
+      <div class="tscroll" id="tblAst"></div>
+    </div>
+  </section>
+
+  <section id="tab-notes" class="hide notes">
+    <div class="card">
+      <h2>Method</h2>
+      <h3>Cost components</h3>
+      <ul>
+        <li><b>Maintenance</b> — subcontractor invoices by invoice date. Invoices repeated on several assets of one work order are split evenly. Registration/tax invoices are removed (calculated below instead). Non-fleet equipment is excluded.</li>
+        <li><b>Fuel card</b> — WEX net cost (after discounts, including DEF) by unit and transaction month. Generic cards with no unit are charged to the billed store.</li>
+        <li><b>Onsite diesel</b> — tank gallons × site price at 353 Dayton, 356 Midland and 359 Burnet, split across the site's trucks by that month's miles.</li>
+        <li><b>Propane</b> — monthly gallons × plan rate by location, split across that location's forklifts by hours. TMFLs carry no propane.</li>
+        <li><b>Depreciation</b> — straight line from original cost: trucks, LD vehicles and trailers 60 months; TMFLs, forklifts and ancillary 84 months. Starts in the origination month and stops when fully depreciated. Leased units have none. Disposed units use their March 2026 book depreciation.</li>
+        <li><b>Registration &amp; taxes</b> — taxes 0.0667% of original cost per month (all classes); registration 0.05% per month (trucks, LD vehicles, trailers). Charged in active months, including after an asset is fully depreciated.</li>
+      </ul>
+      <h3>Measures</h3>
+      <ul>
+        <li><b>All-in cost per mile</b> = all fleet costs at the selected locations ÷ truck &amp; LD telematics miles.</li>
+        <li><b>Truck &amp; LD cost per mile</b> = costs of trucks and LD vehicles only ÷ their miles.</li>
+        <li><b>Cost per hour</b> = forklift &amp; TMFL costs ÷ their hours. Hours Jan–Aug are estimates (lifetime average); DVIR actuals start 8/24.</li>
+        <li><b>Cost per asset-month</b> = trailer / ancillary cost ÷ active asset-months.</li>
+        <li><b>Run rate</b> = average month in the selected range × 12.</li>
+      </ul>
+      <h3>Location &amp; activity</h3>
+      <ul>
+        <li>Units on the 10/31 roster stay at their roster location all year and are active from their origination month.</li>
+        <li>Disposed units keep their history at their last telematics store (else fuel card store, work-order store, hours location or book cost center) and are active from their first to last month of activity.</li>
+      </ul>
+    </div>
+    <div class="card"><h2>Data issues &amp; adjustments</h2><div class="sub">Everything below is reflected in the numbers.</div><div id="tblIssues"></div></div>
+    <div class="card"><h2>Reconciliation to source files (Jan–Oct, all locations)</h2><div id="tblRecon"></div></div>
+  </section>
+</main>
+<footer>McCoy's Building Supply · Fleet · Internal use. Sources: Current assets 10/31/26, WEX fuel card Jan–Oct, Geotab miles Jan–Oct, asset spend YTD, onsite diesel 353/356/359, propane by location, forklift/TMFL hours, March 2026 book depreciation.</footer>
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = __DATA__;
+const MON = DATA.months;
+const COMPS = [
+  {k:'maint',  n:'Maintenance',     col:'var(--s1)'},
+  {k:'fuel_card',n:'Fuel card',     col:'var(--s2)'},
+  {k:'onsite', n:'Onsite diesel',   col:'var(--s3)'},
+  {k:'propane',n:'Propane',         col:'var(--s4)'},
+  {k:'dep',    n:'Depreciation',    col:'var(--s5)'},
+  {k:'regtax', n:'Registration & taxes', col:'var(--s6)'}
+];
+const MILE_CLS = new Set(['Truck','LD Vehicle']), HOUR_CLS = new Set(['Forklift','TMFL']);
+const CLASSES = ['Truck','LD Vehicle','Trailer','Forklift','TMFL','Ancillary Fleet'];
+DATA.assets.forEach(a=>{ a.regtax = a.reg.map((v,i)=>v+a.tax[i]); a.tot = a.maint.map((v,i)=>v+a.fuel_card[i]+a.onsite[i]+a.propane[i]+a.dep[i]+a.regtax[i]); });
+// location-level costs become pseudo-assets of class "Unassigned"
+const LOCMAP = {fuel_card:'Generic fuel cards', onsite:'Onsite diesel (unallocated)', propane:'Propane (unallocated)'};
+DATA.loc.forEach(r=>{
+  const z=()=>Array(10).fill(0); const a={id:LOCMAP[r.comp],s:r.s,c:'Unassigned',t:'Location-level',mk:'',r:true,act:Array(10).fill(0),maint:z(),fuel_card:z(),onsite:z(),propane:z(),dep:z(),reg:z(),tax:z(),regtax:z(),mi:z(),hr:z(),me:[],he:0,pseudo:true};
+  a[r.comp]=r.v.slice(); a.tot=a[r.comp].slice(); DATA.assets.push(a);
+});
+const ST = DATA.stores;
+const fmt$ = v => (v<0?'-':'')+'$'+Math.abs(Math.round(v)).toLocaleString();
+const fmtK = v => Math.abs(v)>=1e6 ? '$'+(v/1e6).toFixed(2)+'M' : '$'+(v/1e3).toFixed(1)+'K';
+const fmtN = v => Math.round(v).toLocaleString();
+const fmtR = (v,d=2) => isFinite(v)&&v!==0 ? '$'+v.toFixed(d) : '—';
+const sum = a => a.reduce((x,y)=>x+y,0);
+const locName = s => (ST[s]?ST[s].name:s);
+const locLabel = s => s+' · '+locName(s);
+
+// ---------------- filters
+const F = {dist:'all', loc:'all', cls:'all', from:0, to:9, ros:'all'};
+const $ = id => document.getElementById(id);
+function opt(sel, items, val){ sel.innerHTML = items.map(([v,t])=>`<option value="${v}">${t}</option>`).join(''); sel.value=val; }
+const districts = [...new Set(Object.values(ST).map(s=>s.district))].sort((a,b)=>a==='Other'?1:b==='Other'?-1:a.localeCompare(b,undefined,{numeric:true}));
+function storeSort(a,b){ return (parseInt(a)||9999)-(parseInt(b)||9999) || a.localeCompare(b); }
+function fillFilters(){
+  opt($('fDist'), [['all','All districts'],...districts.map(d=>[d,d])], F.dist);
+  const locs = Object.keys(ST).filter(s=>F.dist==='all'||ST[s].district===F.dist).sort(storeSort);
+  if(F.loc!=='all' && !locs.includes(F.loc)) F.loc='all';
+  opt($('fLoc'), [['all','All locations'],...locs.map(s=>[s,locLabel(s)])], F.loc);
+  opt($('fCls'), [['all','All classes'],...CLASSES.map(c=>[c,c])], F.cls);
+  opt($('fFrom'), MON.map((m,i)=>[i,m+' 2026']), F.from);
+  opt($('fTo'), MON.map((m,i)=>[i,m+' 2026']), F.to);
+  $('fRos').value=F.ros;
+}
+['fDist','fLoc','fCls','fFrom','fTo','fRos'].forEach(id=>$(id).addEventListener('change',e=>{
+  const k={fDist:'dist',fLoc:'loc',fCls:'cls',fFrom:'from',fTo:'to',fRos:'ros'}[id];
+  F[k] = (k==='from'||k==='to') ? +e.target.value : e.target.value;
+  if(F.from>F.to){ if(k==='from') F.to=F.from; else F.from=F.to; }
+  fillFilters(); render();
+}));
+$('reset').onclick=()=>{ Object.assign(F,{dist:'all',loc:'all',cls:'all',from:0,to:9,ros:'all'}); fillFilters(); render(); };
+
+function assetsInScope(ignoreLoc){
+  return DATA.assets.filter(a=>{
+    const st = ST[a.s]; if(!st) return false;
+    if(F.dist!=='all' && st.district!==F.dist) return false;
+    if(!ignoreLoc && F.loc!=='all' && a.s!==F.loc) return false;
+    if(F.cls!=='all' && a.c!==F.cls) return false;
+    if(F.ros==='roster' && (!a.r || a.pseudo)) return false;
+    if(F.ros==='disp' && (a.r)) return false;
+    return true;
+  });
+}
+const MR = () => { const r=[]; for(let i=F.from;i<=F.to;i++) r.push(i); return r; };
+
+// aggregate a set of assets over the month range
+function agg(list, months){
+  months = months||MR();
+  const o = {n:0, comp:{}, tot:0, miles:0, hours:0, mileCost:0, hourCost:0, trlCost:0, trlAM:0, actOct:0, byMonth:MON.map(()=>({tot:0,miles:0,estMiles:0,mileCost:0,c:{}}))};
+  COMPS.forEach(c=>o.comp[c.k]=0);
+  list.forEach(a=>{
+    if(a.act[F.to] && !a.pseudo) o.actOct++;
+    months.forEach(i=>{
+      const t=a.tot[i]; o.tot+=t; const bm=o.byMonth[i]; bm.tot+=t;
+      COMPS.forEach(c=>{ const v=a[c.k][i]; o.comp[c.k]+=v; bm.c[c.k]=(bm.c[c.k]||0)+v; });
+      if(MILE_CLS.has(a.c)){ o.miles+=a.mi[i]; o.mileCost+=t; bm.miles+=a.mi[i]; bm.mileCost+=t; if(a.me.includes(i+1)) bm.estMiles+=a.mi[i]; }
+      if(HOUR_CLS.has(a.c)){ o.hours+=a.hr[i]; o.hourCost+=t; }
+      if(a.c==='Trailer'||a.c==='Ancillary Fleet'){ o.trlCost+=t; o.trlAM+=a.act[i]; }
+    });
+  });
+  o.months=months.length;
+  o.cpm = o.miles? o.tot/o.miles : NaN;
+  o.tcpm = o.miles? o.mileCost/o.miles : NaN;
+  o.cph = o.hours? o.hourCost/o.hours : NaN;
+  o.cpam = o.trlAM? o.trlCost/o.trlAM : NaN;
+  o.run = o.tot/o.months*12;
+  return o;
+}
+
+const isEst = b => b.miles>0 && b.estMiles/b.miles>0.05;
+// ---------------- tooltip
+const tip=$('tip');
+function showTip(html, ev, host){ tip.innerHTML=html; tip.style.display='block';
+  const r=host.getBoundingClientRect(); let x=ev.clientX-r.left+16, y=ev.clientY-r.top+10;
+  if(x+tip.offsetWidth>r.width) x=ev.clientX-r.left-tip.offsetWidth-16;
+  tip.style.left=(x+r.left+window.scrollX)+'px'; tip.style.top=(y+r.top+window.scrollY)+'px'; }
+function hideTip(){ tip.style.display='none'; }
+document.body.appendChild(tip); tip.style.position='absolute';
+
+// ---------------- charts (plain SVG)
+function niceMax(v){ if(v<=0) return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); const n=v/p; return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p; }
+function costChart(o){
+  const host=$('chCost'); const W=host.clientWidth||700, H=300, pl=58, pr=10, pt=10, pb=28;
+  const ms=MR(); const max=niceMax(Math.max(...ms.map(i=>o.byMonth[i].tot))*1.05);
+  const bw=(W-pl-pr)/ms.length, barW=Math.min(46,bw*0.62);
+  const y=v=>pt+(H-pt-pb)*(1-v/max);
+  let s=`<svg width="${W}" height="${H}" role="img" aria-label="Monthly cost by component">`;
+  for(let k=0;k<=4;k++){ const v=max*k/4, yy=y(v); s+=`<line x1="${pl}" x2="${W-pr}" y1="${yy}" y2="${yy}" stroke="#e8eae4"/><text x="${pl-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="#7c7b76">${fmtK(v)}</text>`; }
+  ms.forEach((i,j)=>{
+    const x=pl+bw*j+(bw-barW)/2; let acc=0; const segs=COMPS.map(c=>({c,v:Math.max(0,o.byMonth[i].c[c.k]||0)})).filter(g=>g.v>0);
+    segs.forEach((g,gi)=>{ const y0=y(acc), y1=y(acc+g.v); acc+=g.v; const h=Math.max(0,y0-y1-(gi<segs.length-1?2:0));
+      const top=gi===segs.length-1; s+= top ? `<path d="M${x},${y0} V${y1+4} q0,-4 4,-4 H${x+barW-4} q4,0 4,4 V${y0} Z" fill="${g.c.col}" transform="translate(0,${-(y0-y1-h)})"/>` : `<rect x="${x}" y="${y0-h}" width="${barW}" height="${h}" fill="${g.c.col}"/>`; });
+    s+=`<text x="${x+barW/2}" y="${H-10}" text-anchor="middle" font-size="11" fill="#52514e">${MON[i]}</text>`;
+    s+=`<rect class="hit" data-i="${i}" x="${pl+bw*j}" y="${pt}" width="${bw}" height="${H-pt-pb}" fill="transparent"/>`;
+  });
+  s+=`<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="#9a9a94"/></svg>`;
+  host.innerHTML=s;
+  host.querySelectorAll('.hit').forEach(r=>{ r.addEventListener('mousemove',ev=>{ const i=+r.dataset.i, b=o.byMonth[i];
+    showTip(`<b>${MON[i]} 2026 · ${fmt$(b.tot)}</b>`+COMPS.slice().reverse().map(c=>`<div class="r"><span><i style="background:${c.col}"></i>${c.n}</span><span>${fmt$(b.c[c.k]||0)}</span></div>`).join(''),ev,host); });
+    r.addEventListener('mouseleave',hideTip); });
+  $('lgCost').innerHTML=COMPS.map(c=>`<span><i style="background:${c.col}"></i>${c.n}</span>`).join('');
+}
+function cpmChart(o){
+  const host=$('chCpm'); const W=host.clientWidth||500, H=300, pl=50, pr=84, pt=14, pb=28;
+  const ms=MR(); const series=[{n:'All-in',col:'var(--green)',f:b=>b.miles?b.tot/b.miles:NaN},{n:'Truck & LD',col:'var(--s2)',f:b=>b.miles?b.mileCost/b.miles:NaN}];
+  const vals=ms.flatMap(i=>series.map(se=>se.f(o.byMonth[i]))).filter(isFinite);
+  if(!vals.length){ host.innerHTML='<div class="muted" style="padding:40px 0;text-align:center">No truck or LD miles in the current selection.</div>'; $('lgCpm').innerHTML=''; return; }
+  const max=niceMax(Math.max(...vals)*1.1);
+  const step=ms.length>1?(W-pl-pr)/(ms.length-1):0; const x=j=>ms.length>1?pl+step*j:(W-pl-pr)/2+pl;
+  const y=v=>pt+(H-pt-pb)*(1-v/max);
+  let s=`<svg width="${W}" height="${H}" role="img" aria-label="Cost per mile by month">`;
+  for(let k=0;k<=4;k++){ const v=max*k/4, yy=y(v); s+=`<line x1="${pl}" x2="${W-pr}" y1="${yy}" y2="${yy}" stroke="#e8eae4"/><text x="${pl-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="#7c7b76">$${v.toFixed(2)}</text>`; }
+  ms.forEach((i,j)=>{ s+=`<text x="${x(j)}" y="${H-10}" text-anchor="middle" font-size="11" fill="#52514e">${MON[i]}</text>`; });
+  series.forEach(se=>{
+    const pts=ms.map((i,j)=>[x(j),se.f(o.byMonth[i]),i]).filter(p=>isFinite(p[1]));
+    s+=`<polyline fill="none" stroke="${se.col}" stroke-width="2" points="${pts.map(p=>p[0]+','+y(p[1])).join(' ')}"/>`;
+    pts.forEach(p=>{ const est=isEst(o.byMonth[p[2]]); s+=`<circle cx="${p[0]}" cy="${y(p[1])}" r="4.5" fill="${est?'#fff':se.col}" stroke="${est?se.col:'#fcfcfb'}" stroke-width="2"/>`; });
+    const last=pts[pts.length-1]; if(last) s+=`<text x="${last[0]+8}" y="${y(last[1])+4}" font-size="11" fill="#0b0b0b">${se.n}</text>`;
+  });
+  s+=`<line x1="${pl}" x2="${W-pr}" y1="${y(0)}" y2="${y(0)}" stroke="#9a9a94"/><line class="xh" x1="0" x2="0" y1="${pt}" y2="${H-pb}" stroke="#9a9a94" stroke-dasharray="3 3" visibility="hidden"/>`;
+  s+=`<rect class="hit" x="${pl-step/2}" y="${pt}" width="${W-pl-pr+step}" height="${H-pt-pb}" fill="transparent"/></svg>`;
+  host.innerHTML=s;
+  const hit=host.querySelector('.hit'), xh=host.querySelector('.xh');
+  hit.addEventListener('mousemove',ev=>{ const r=host.getBoundingClientRect(); const px=ev.clientX-r.left; let j=ms.length>1?Math.round((px-pl)/step):0; j=Math.max(0,Math.min(ms.length-1,j)); const i=ms[j], b=o.byMonth[i];
+    xh.setAttribute('x1',x(j)); xh.setAttribute('x2',x(j)); xh.setAttribute('visibility','visible');
+    showTip(`<b>${MON[i]} 2026${isEst(b)?' <span class="pill e">'+Math.round(b.estMiles/b.miles*100)+'% of miles estimated</span>':''}</b>`+series.map(se=>`<div class="r"><span><i style="background:${se.col}"></i>${se.n}</span><span>${fmtR(se.f(b))}</span></div>`).join('')+`<div class="r"><span>Truck &amp; LD miles</span><span>${fmtN(b.miles)}</span></div>`,ev,host); });
+  hit.addEventListener('mouseleave',()=>{ hideTip(); xh.setAttribute('visibility','hidden'); });
+  $('lgCpm').innerHTML=series.map(se=>`<span><i class="ln" style="background:${se.col}"></i>${se.n}</span>`).join('')+`<span><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#52514e" stroke-width="2"/></svg>Estimated miles</span>`;
+}
+
+// ---------------- sortable table helper
+function table(host, cols, rows, opts={}){
+  const st = host._sort || {k:opts.sortKey||cols[0].k, asc:!!opts.asc};
+  host._sort=st;
+  const sorted=rows.slice().sort((a,b)=>{ let x=a[st.k], y=b[st.k]; if(typeof x==='string'||typeof y==='string'){ x=String(x??''); y=String(y??''); return st.asc?x.localeCompare(y,undefined,{numeric:true}):y.localeCompare(x,undefined,{numeric:true}); }
+    x=isFinite(x)?x:-Infinity; y=isFinite(y)?y:-Infinity; return st.asc?x-y:y-x; });
+  const lim = opts.limit && !host._all ? opts.limit : Infinity;
+  let h='<table><thead><tr>'+cols.map(c=>`<th data-k="${c.k}" class="${c.l?'l':''} ${st.k===c.k?'sorted'+(st.asc?' asc':''):''}" title="${c.title||''}">${c.n}</th>`).join('')+'</tr></thead><tbody>';
+  sorted.slice(0,lim).forEach(r=>{ h+=`<tr class="${opts.onRow?'click':''} ${opts.selKey&&r._key===opts.selKey?'sel':''}" data-key="${r._key??''}">`+cols.map(c=>`<td class="${c.l?'l':''}">${c.f?c.f(r[c.k],r):(r[c.k]??'')}</td>`).join('')+'</tr>'; });
+  h+='</tbody>';
+  if(opts.foot) h+='<tfoot><tr>'+cols.map(c=>`<td class="${c.l?'l':''}">${opts.foot[c.k]!==undefined?(c.f?c.f(opts.foot[c.k],opts.foot):opts.foot[c.k]):''}</td>`).join('')+'</tr></tfoot>';
+  h+='</table>';
+  if(sorted.length>lim) h+=`<div style="padding:10px;text-align:center"><button class="btn more">Show all ${sorted.length.toLocaleString()} rows</button></div>`;
+  host.innerHTML=h;
+  host.querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; if(st.k===k) st.asc=!st.asc; else {st.k=k; const c=cols.find(c=>c.k===k); st.asc=!!c.l;} table(host,cols,rows,opts); });
+  if(opts.onRow) host.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>opts.onRow(tr.dataset.key));
+  const m=host.querySelector('.more'); if(m) m.onclick=()=>{ host._all=true; table(host,cols,rows,opts); };
+  host._csv = () => [cols.map(c=>'"'+c.n+'"').join(','), ...sorted.map(r=>cols.map(c=>{ const v=r[c.k]; return typeof v==='number'? (isFinite(v)? +v.toFixed(4):'') : '"'+String(v??'').replace(/<[^>]+>/g,'').replace(/"/g,'""')+'"'; }).join(','))].join('\n');
+}
+function downloadCSV(host,name){ const blob=new Blob([host._csv()],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+$('csvLoc').onclick=()=>downloadCSV($('tblLoc'),'mccoys_cpm_locations.csv');
+$('csvAst').onclick=()=>downloadCSV($('tblAst'),'mccoys_cpm_assets.csv');
+
+// ---------------- views
+function rangeLabel(){ return F.from===F.to? MON[F.from]+' 2026' : MON[F.from]+'–'+MON[F.to]+' 2026'; }
+function renderOverview(list){
+  const o=agg(list);
+  const last3=agg(list, MR().slice(-3));
+  $('tiles').innerHTML=[
+    ['Total cost', fmtK(o.tot), rangeLabel()+' · '+fmtN(o.actOct)+' units active in '+MON[F.to], ''],
+    ['Run rate (annualized)', fmtK(o.run), 'avg '+fmtK(o.tot/o.months)+' / month × 12','y'],
+    ['All-in cost per mile', fmtR(o.cpm), 'Last 3 months: '+fmtR(last3.cpm), ''],
+    ['Truck & LD cost per mile', fmtR(o.tcpm), fmtN(o.miles)+' miles','y'],
+    ['Forklift & TMFL cost / hour', fmtR(o.cph), fmtN(o.hours)+' hours (Jan–Aug est.)',''],
+    ['Trailer & ancillary / asset-month', fmtR(o.cpam,0), fmtN(o.trlAM)+' asset-months','y']
+  ].map(([k,v,s,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  costChart(o); cpmChart(o);
+  const rows=COMPS.map(c=>({_key:c.k,n:`<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${c.col};margin-right:7px"></span>${c.n}`,ytd:o.comp[c.k],pct:o.tot?o.comp[c.k]/o.tot:0,avg:o.comp[c.k]/o.months,run:o.comp[c.k]/o.months*12,cpm:o.miles?o.comp[c.k]/o.miles:NaN}));
+  table($('tblComp'),[
+    {k:'n',n:'Component',l:1},{k:'ytd',n:'Selected months',f:fmt$},{k:'pct',n:'% of total',f:v=>(v*100).toFixed(1)+'%'},{k:'avg',n:'Avg / month',f:fmt$},{k:'run',n:'Run rate',f:fmt$},{k:'cpm',n:'Per all-in mile',f:v=>fmtR(v,3)}
+  ], rows, {sortKey:'ytd', foot:{n:'Total',ytd:o.tot,pct:1,avg:o.tot/o.months,run:o.run,cpm:o.cpm}});
+  const crow=CLASSES.concat(['Unassigned']).map(c=>{ const a=agg(list.filter(x=>x.c===c)); if(!a.tot&&!a.actOct) return null;
+    const unit = MILE_CLS.has(c)?'mile':HOUR_CLS.has(c)?'hour':c==='Unassigned'?'':'asset-month';
+    const rate = MILE_CLS.has(c)?a.tcpm:HOUR_CLS.has(c)?a.cph:c==='Unassigned'?NaN:a.cpam;
+    return {_key:c,c,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate}; }).filter(Boolean);
+  table($('tblCls'),[
+    {k:'c',n:'Class',l:1,f:v=>v==='Unassigned'?'Location-level (generic cards etc.)':v},{k:'units',n:'Active units ('+MON[F.to]+')',f:fmtN},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
+    {k:'maint',n:'Maintenance',f:fmt$},{k:'fuel',n:'Fuel (all)',f:fmt$},{k:'fixed',n:'Depr. + reg/tax',f:fmt$},{k:'usage',n:'Miles / hours / asset-mo',f:fmtN},{k:'unit',n:'Per',l:1},{k:'rate',n:'Rate',f:v=>fmtR(v)}
+  ], crow, {sortKey:'tot'});
+}
+
+let selLoc=null;
+function renderLocations(list){
+  const by={}; list.forEach(a=>(by[a.s]=by[a.s]||[]).push(a));
+  const ms=MR(), l3=ms.slice(-3);
+  const rows=Object.entries(by).map(([s,L])=>{ const o=agg(L), t=agg(L,l3);
+    return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:o.actOct,tot:o.tot,run:o.run,maint:o.comp.maint,fuel:o.comp.fuel_card+o.comp.onsite+o.comp.propane,fixed:o.comp.dep+o.comp.regtax,miles:o.miles,cpm:o.cpm,tcpm:o.tcpm,l3:t.cpm,hours:o.hours,cph:o.cph,cpam:o.cpam}; });
+  const T=agg(list), T3=agg(list,l3);
+  table($('tblLoc'),[
+    {k:'code',n:'Loc',l:1},{k:'name',n:'Name',l:1},{k:'dist',n:'District',l:1},{k:'units',n:'Units',f:fmtN,title:'Active units in the last selected month'},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
+    {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'fixed',n:'Depr+reg/tax',f:fmt$},{k:'miles',n:'Truck/LD miles',f:fmtN},
+    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'tcpm',n:'Truck/LD CPM',f:v=>fmtR(v)},{k:'l3',n:'Last 3 mo CPM',f:v=>fmtR(v)},{k:'hours',n:'FL/TMFL hrs',f:fmtN},{k:'cph',n:'Cost / hr',f:v=>fmtR(v)},{k:'cpam',n:'Trailer / asset-mo',f:v=>fmtR(v,0)}
+  ], rows, {sortKey:'tot', selKey:selLoc, onRow:k=>{ selLoc=k; renderLocations(list); renderLocDetail(k); },
+    foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,tcpm:T.tcpm,l3:T3.cpm,hours:T.hours,cph:T.cph,cpam:T.cpam}});
+  if(selLoc && by[selLoc]) renderLocDetail(selLoc); else $('locDetail').classList.add('hide');
+}
+function renderLocDetail(s){
+  const L=assetsInScope(true).filter(a=>a.s===s); const box=$('locDetail'); box.classList.remove('hide');
+  const ms=MR(); const o=agg(L);
+  let h=`<div class="detail-head"><h2>${locLabel(s)}</h2><span class="pill">${ST[s].district}</span><span style="flex:1"></span><button class="btn" id="closeDet">Close</button></div>`;
+  h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Truck/LD CPM</th><th>FL/TMFL hrs</th><th>Cost / hr</th></tr></thead><tbody>';
+  ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.hours)}</td><td>${fmtR(m.cph)}</td></tr>`; });
+  h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.hours)}</td><td>${fmtR(o.cph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="5"></td></tr></tfoot></table></div>`;
+  h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Assets at this location</h2><div class="tscroll" id="locAssets"></div>';
+  box.innerHTML=h; $('closeDet').onclick=()=>{ selLoc=null; box.classList.add('hide'); render(); };
+  assetTable($('locAssets'), L);
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function assetRows(L){
+  const ms=MR();
+  return L.map(a=>{ const g=k=>sum(ms.map(i=>a[k][i])); const tot=g('tot'), mi=g('mi'), hr=g('hr');
+    const flags=[]; if(!a.r) flags.push('<span class="pill d">Disposed</span>'); if(a.pseudo) flags.push('<span class="pill">Location-level</span>'); if(a.fd) flags.push('<span class="pill">Fully depr.</span>');
+    if(a.me&&a.me.some(m=>ms.includes(m-1))) flags.push('<span class="pill e">Est. miles</span>'); if(a.he===1) flags.push('<span class="pill e">Hrs all est.</span>'); if(a.cs&&a.cs.startsWith('Implied')) flags.push('<span class="pill e">Implied cost</span>');
+    const rate = MILE_CLS.has(a.c)? (mi?tot/mi:NaN) : HOUR_CLS.has(a.c)? (hr?tot/hr:NaN) : NaN;
+    return {_key:a.id, id:a.id, s:a.s, c:a.c, t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
+  }).filter(r=>r.tot!==0||r.months>0||r.mi>0);
+}
+function assetTable(host, L){
+  table(host,[
+    {k:'id',n:'Unit',l:1},{k:'s',n:'Loc',l:1},{k:'c',n:'Class',l:1},{k:'t',n:'Type',l:1},{k:'mk',n:'Make',l:1},{k:'cost',n:'Orig. cost',f:v=>v?fmt$(v):'—'},{k:'months',n:'Active mo'},
+    {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'dep',n:'Depr.',f:fmt$},{k:'regtax',n:'Reg/tax',f:fmt$},{k:'tot',n:'Total',f:fmt$},
+    {k:'mi',n:'Miles',f:v=>v?fmtN(v):'—'},{k:'hr',n:'Hours',f:v=>v?fmtN(v):'—'},{k:'rate',n:'Cost / mi or hr',f:(v,r)=>isFinite(v)?fmtR(v)+r.unit:'—'},{k:'flags',n:'Flags',l:1}
+  ], assetRows(L), {sortKey:'tot', limit:300});
+}
+function renderAssets(list){
+  const q=$('aSearch').value.trim().toLowerCase();
+  const L=q? list.filter(a=>[a.id,a.t,a.mk,a.s,locName(a.s),a.c].join(' ').toLowerCase().includes(q)) : list;
+  $('tblAst')._all=false; assetTable($('tblAst'), L); $('aCount').textContent=L.filter(a=>!a.pseudo).length.toLocaleString()+' assets';
+}
+$('aSearch').addEventListener('input',()=>renderAssets(assetsInScope()));
+
+function renderNotes(){
+  const iss=DATA.issues;
+  $('tblIssues').innerHTML='<table class="issue"><thead><tr><th class="l">Area</th><th class="l">Item</th><th>Count</th><th class="l">How it is handled</th><th class="l">Units / detail</th></tr></thead><tbody>'+
+    iss.map(r=>`<tr><td class="l"><span class="pill">${r.cat}</span></td><td class="l"><b>${r.item}</b></td><td>${(r.n||0).toLocaleString()}</td><td class="l">${r.detail}</td><td class="list">${r.list||''}</td></tr>`).join('')+'</tbody></table>';
+  const R=DATA.recon; const nfTot=Object.values(DATA.nonfleet).reduce((s,a)=>s+sum(a),0);
+  const rows=[
+    ['Maintenance — source invoices', R.maint_src],['  less: duplicate multi-asset invoice amounts (split)', -R.maint_split_removed],['  less: non-fleet equipment', -R.maint_nonfleet],['  less: registration / tax invoices', -R.maint_regtax],['Maintenance in report', R.maint_assets],
+    ['Fuel card — source net cost', R.fuel_card_src],['Fuel card in report', R.fuel_card_out],
+    ['Onsite diesel — source', R.onsite_src],['Onsite diesel in report', R.onsite_out],
+    ['Propane — source (after bottle fix, excl. Canyon Lake)', R.propane_src],['Propane in report', R.propane_out],
+    ['Depreciation (calculated + book for disposed)', R.dep_out],['Registration (calculated)', R.reg_out],['Taxes (calculated)', R.tax_out]
+  ];
+  let h='<table><thead><tr><th class="l">Line</th><th>Amount</th></tr></thead><tbody>'+rows.map(([n,v])=>`<tr><td class="l">${n.startsWith('  ')?'&nbsp;&nbsp;&nbsp;&nbsp;'+n.trim():'<b>'+n+'</b>'}</td><td>${fmt$(v)}</td></tr>`).join('');
+  h+=`<tr><td class="l"><b>Telematics miles — source</b></td><td>${fmtN(R.miles_src)}</td></tr><tr><td class="l">&nbsp;&nbsp;&nbsp;&nbsp;plus: estimated miles for missing vehicle-months</td><td>${fmtN(R.miles_filled)}</td></tr><tr><td class="l"><b>Miles in report</b></td><td>${fmtN(R.miles_out)}</td></tr>`;
+  h+=`<tr><td class="l"><b>Forklift / TMFL hours — source = report</b></td><td>${fmtN(R.hours_out)}</td></tr></tbody></table>`;
+  $('tblRecon').innerHTML=h;
+}
+
+// ---------------- tabs & render
+let TAB='overview';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ TAB=b.dataset.tab; document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  ['overview','locations','assets','notes'].forEach(t=>$('tab-'+t).classList.toggle('hide',t!==TAB)); render(); });
+function render(){
+  const list=assetsInScope();
+  if(TAB==='overview') renderOverview(list);
+  if(TAB==='locations') renderLocations(list);
+  if(TAB==='assets') renderAssets(list);
+  if(TAB==='notes') renderNotes();
+}
+window.addEventListener('resize',()=>{ if(TAB==='overview') renderOverview(assetsInScope()); });
+$('built').textContent=DATA.built;
+fillFilters(); render();
+</script>
+</body>
+</html>
