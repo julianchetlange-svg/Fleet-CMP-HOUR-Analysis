@@ -34,7 +34,7 @@ main{max-width:1500px;margin:0 auto;padding:18px 24px 40px}
 .btn{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--green);background:#fff;color:var(--green);padding:6px 12px;border-radius:6px;cursor:pointer}
 .btn:hover{background:var(--green);color:#fff}
 .btn.y{background:var(--yellow);border-color:#d9c500;color:var(--green-ink)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:16px}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;border-top:4px solid var(--green)}
 .tile.y{border-top-color:var(--yellow)}
 .tile .k{font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.4px}
@@ -115,7 +115,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
         <div class="legend" id="lgCpm"></div><div class="chart" id="chCpm"></div></div>
     </div>
     <div class="card"><h2>Cost breakdown &amp; run rate</h2><div class="sub">Run rate annualizes the selected months (average month × 12).</div><div id="tblComp"></div></div>
-    <div class="card"><h2>Measures by asset class</h2><div class="sub">Trucks &amp; LD vehicles per mile · forklifts &amp; TMFLs per hour · trailers &amp; ancillary per asset-month.</div><div id="tblCls"></div></div>
+    <div class="card"><h2>Measures by asset class</h2><div class="sub">Trucks &amp; LD vehicles per mile · forklifts and TMFLs each per hour · trailers &amp; ancillary per asset-month.</div><div id="tblCls"></div></div>
   </section>
 
   <section id="tab-locations" class="hide">
@@ -149,7 +149,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
       <ul>
         <li><b>All-in cost per mile</b> = all fleet costs at the selected locations ÷ truck &amp; LD telematics miles.</li>
         <li><b>Truck &amp; LD cost per mile</b> = costs of trucks and LD vehicles only ÷ their miles.</li>
-        <li><b>Cost per hour</b> = forklift &amp; TMFL costs ÷ their hours. Hours Jan–Aug are estimates (lifetime average); DVIR actuals start 8/24.</li>
+        <li><b>Cost per hour</b> = shown separately for forklifts and TMFLs: each class's costs ÷ its own hours. Hours Jan–Aug are estimates (lifetime average); DVIR actuals start 8/24.</li>
         <li><b>Cost per asset-month</b> = trailer / ancillary cost ÷ active asset-months.</li>
         <li><b>Run rate</b> = average month in the selected range × 12.</li>
       </ul>
@@ -235,7 +235,7 @@ const MR = () => { const r=[]; for(let i=F.from;i<=F.to;i++) r.push(i); return r
 // aggregate a set of assets over the month range
 function agg(list, months){
   months = months||MR();
-  const o = {n:0, comp:{}, tot:0, miles:0, hours:0, mileCost:0, hourCost:0, trlCost:0, trlAM:0, actOct:0, byMonth:MON.map(()=>({tot:0,miles:0,estMiles:0,mileCost:0,c:{}}))};
+  const o = {n:0, comp:{}, tot:0, miles:0, hours:0, mileCost:0, hourCost:0, flH:0, flC:0, tmH:0, tmC:0, trlCost:0, trlAM:0, actOct:0, byMonth:MON.map(()=>({tot:0,miles:0,estMiles:0,mileCost:0,c:{}}))};
   COMPS.forEach(c=>o.comp[c.k]=0);
   list.forEach(a=>{
     if(a.act[F.to] && !a.pseudo) o.actOct++;
@@ -244,6 +244,8 @@ function agg(list, months){
       COMPS.forEach(c=>{ const v=a[c.k][i]; o.comp[c.k]+=v; bm.c[c.k]=(bm.c[c.k]||0)+v; });
       if(MILE_CLS.has(a.c)){ o.miles+=a.mi[i]; o.mileCost+=t; bm.miles+=a.mi[i]; bm.mileCost+=t; if(a.me.includes(i+1)) bm.estMiles+=a.mi[i]; }
       if(HOUR_CLS.has(a.c)){ o.hours+=a.hr[i]; o.hourCost+=t; }
+      if(a.c==='Forklift'){ o.flH+=a.hr[i]; o.flC+=t; }
+      if(a.c==='TMFL'){ o.tmH+=a.hr[i]; o.tmC+=t; }
       if(a.c==='Trailer'||a.c==='Ancillary Fleet'){ o.trlCost+=t; o.trlAM+=a.act[i]; }
     });
   });
@@ -251,6 +253,8 @@ function agg(list, months){
   o.cpm = o.miles? o.tot/o.miles : NaN;
   o.tcpm = o.miles? o.mileCost/o.miles : NaN;
   o.cph = o.hours? o.hourCost/o.hours : NaN;
+  o.flcph = o.flH? o.flC/o.flH : NaN;
+  o.tmcph = o.tmH? o.tmC/o.tmH : NaN;
   o.cpam = o.trlAM? o.trlCost/o.trlAM : NaN;
   o.run = o.tot/o.months*12;
   return o;
@@ -350,8 +354,9 @@ function renderOverview(list){
     ['Run rate (annualized)', fmtK(o.run), 'avg '+fmtK(o.tot/o.months)+' / month × 12','y'],
     ['All-in cost per mile', fmtR(o.cpm), 'Last 3 months: '+fmtR(last3.cpm), ''],
     ['Truck & LD cost per mile', fmtR(o.tcpm), fmtN(o.miles)+' miles','y'],
-    ['Forklift & TMFL cost / hour', fmtR(o.cph), fmtN(o.hours)+' hours (Jan–Aug est.)',''],
-    ['Trailer & ancillary / asset-month', fmtR(o.cpam,0), fmtN(o.trlAM)+' asset-months','y']
+    ['Forklift cost / hour', fmtR(o.flcph), fmtN(o.flH)+' hours (Jan–Aug est.)',''],
+    ['TMFL cost / hour', fmtR(o.tmcph), fmtN(o.tmH)+' hours (Jan–Aug est.)','y'],
+    ['Trailer & ancillary / asset-month', fmtR(o.cpam,0), fmtN(o.trlAM)+' asset-months','']
   ].map(([k,v,s,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
   costChart(o); cpmChart(o);
   const rows=COMPS.map(c=>({_key:c.k,n:`<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${c.col};margin-right:7px"></span>${c.n}`,ytd:o.comp[c.k],pct:o.tot?o.comp[c.k]/o.tot:0,avg:o.comp[c.k]/o.months,run:o.comp[c.k]/o.months*12,cpm:o.miles?o.comp[c.k]/o.miles:NaN}));
@@ -373,23 +378,23 @@ function renderLocations(list){
   const by={}; list.forEach(a=>(by[a.s]=by[a.s]||[]).push(a));
   const ms=MR(), l3=ms.slice(-3);
   const rows=Object.entries(by).map(([s,L])=>{ const o=agg(L), t=agg(L,l3);
-    return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:o.actOct,tot:o.tot,run:o.run,maint:o.comp.maint,fuel:o.comp.fuel_card+o.comp.onsite+o.comp.propane,fixed:o.comp.dep+o.comp.regtax,miles:o.miles,cpm:o.cpm,tcpm:o.tcpm,l3:t.cpm,hours:o.hours,cph:o.cph,cpam:o.cpam}; });
+    return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:o.actOct,tot:o.tot,run:o.run,maint:o.comp.maint,fuel:o.comp.fuel_card+o.comp.onsite+o.comp.propane,fixed:o.comp.dep+o.comp.regtax,miles:o.miles,cpm:o.cpm,tcpm:o.tcpm,l3:t.cpm,flH:o.flH,flcph:o.flcph,tmH:o.tmH,tmcph:o.tmcph,cpam:o.cpam}; });
   const T=agg(list), T3=agg(list,l3);
   table($('tblLoc'),[
     {k:'code',n:'Loc',l:1},{k:'name',n:'Name',l:1},{k:'dist',n:'District',l:1},{k:'units',n:'Units',f:fmtN,title:'Active units in the last selected month'},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
     {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'fixed',n:'Depr+reg/tax',f:fmt$},{k:'miles',n:'Truck/LD miles',f:fmtN},
-    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'tcpm',n:'Truck/LD CPM',f:v=>fmtR(v)},{k:'l3',n:'Last 3 mo CPM',f:v=>fmtR(v)},{k:'hours',n:'FL/TMFL hrs',f:fmtN},{k:'cph',n:'Cost / hr',f:v=>fmtR(v)},{k:'cpam',n:'Trailer / asset-mo',f:v=>fmtR(v,0)}
+    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'tcpm',n:'Truck/LD CPM',f:v=>fmtR(v)},{k:'l3',n:'Last 3 mo CPM',f:v=>fmtR(v)},{k:'flH',n:'Forklift hrs',f:fmtN},{k:'flcph',n:'Forklift $/hr',f:v=>fmtR(v)},{k:'tmH',n:'TMFL hrs',f:fmtN},{k:'tmcph',n:'TMFL $/hr',f:v=>fmtR(v)},{k:'cpam',n:'Trailer / asset-mo',f:v=>fmtR(v,0)}
   ], rows, {sortKey:'tot', selKey:selLoc, onRow:k=>{ selLoc=k; renderLocations(list); renderLocDetail(k); },
-    foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,tcpm:T.tcpm,l3:T3.cpm,hours:T.hours,cph:T.cph,cpam:T.cpam}});
+    foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,tcpm:T.tcpm,l3:T3.cpm,flH:T.flH,flcph:T.flcph,tmH:T.tmH,tmcph:T.tmcph,cpam:T.cpam}});
   if(selLoc && by[selLoc]) renderLocDetail(selLoc); else $('locDetail').classList.add('hide');
 }
 function renderLocDetail(s){
   const L=assetsInScope(true).filter(a=>a.s===s); const box=$('locDetail'); box.classList.remove('hide');
   const ms=MR(); const o=agg(L);
   let h=`<div class="detail-head"><h2>${locLabel(s)}</h2><span class="pill">${ST[s].district}</span><span style="flex:1"></span><button class="btn" id="closeDet">Close</button></div>`;
-  h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Truck/LD CPM</th><th>FL/TMFL hrs</th><th>Cost / hr</th></tr></thead><tbody>';
-  ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.hours)}</td><td>${fmtR(m.cph)}</td></tr>`; });
-  h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.hours)}</td><td>${fmtR(o.cph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="5"></td></tr></tfoot></table></div>`;
+  h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Truck/LD CPM</th><th>Forklift hrs</th><th>Forklift $/hr</th><th>TMFL hrs</th><th>TMFL $/hr</th></tr></thead><tbody>';
+  ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.flH)}</td><td>${fmtR(m.flcph)}</td><td>${fmtN(m.tmH)}</td><td>${fmtR(m.tmcph)}</td></tr>`; });
+  h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.flH)}</td><td>${fmtR(o.flcph)}</td><td>${fmtN(o.tmH)}</td><td>${fmtR(o.tmcph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="7"></td></tr></tfoot></table></div>`;
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Assets at this location</h2><div class="tscroll" id="locAssets"></div>';
   box.innerHTML=h; $('closeDet').onclick=()=>{ selLoc=null; box.classList.add('hide'); render(); };
   assetTable($('locAssets'), L);
