@@ -345,6 +345,7 @@ $('csvLoc').onclick=()=>downloadCSV($('tblLoc'),'mccoys_cpm_locations.csv');
 $('csvAst').onclick=()=>downloadCSV($('tblAst'),'mccoys_cpm_assets.csv');
 
 // ---------------- views
+function hrsNote(){ const est=F.from<=7, act=F.to>=8; return est&&act? MON[F.from]+'–Aug est., Sep'+(F.to>8?'–Oct':'')+' actual' : est? 'estimated' : 'actual DVIR'; }
 function rangeLabel(){ return F.from===F.to? MON[F.from]+' 2026' : MON[F.from]+'–'+MON[F.to]+' 2026'; }
 function renderOverview(list){
   const o=agg(list);
@@ -354,8 +355,8 @@ function renderOverview(list){
     ['Run rate (annualized)', fmtK(o.run), 'avg '+fmtK(o.tot/o.months)+' / month × 12','y'],
     ['All-in cost per mile', fmtR(o.cpm), 'Last 3 months: '+fmtR(last3.cpm), ''],
     ['Truck & LD cost per mile', fmtR(o.tcpm), fmtN(o.miles)+' miles','y'],
-    ['Forklift cost / hour', fmtR(o.flcph), fmtN(o.flH)+' hours (Jan–Aug est.)',''],
-    ['TMFL cost / hour', fmtR(o.tmcph), fmtN(o.tmH)+' hours (Jan–Aug est.)','y'],
+    ['Forklift cost / hour', fmtR(o.flcph), fmtN(o.flH)+' hours · '+hrsNote(),''],
+    ['TMFL cost / hour', fmtR(o.tmcph), fmtN(o.tmH)+' hours · '+hrsNote(),'y'],
     ['Trailer & ancillary / asset-month', fmtR(o.cpam,0), fmtN(o.trlAM)+' asset-months','']
   ].map(([k,v,s,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
   costChart(o); cpmChart(o);
