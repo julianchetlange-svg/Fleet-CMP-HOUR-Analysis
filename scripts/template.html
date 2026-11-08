@@ -124,6 +124,10 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
       <div class="tscroll" id="tblLoc"></div>
     </div>
     <div class="card hide" id="locDetail"></div>
+    <div class="card">
+      <div class="toolbar"><h2 style="margin:0;color:var(--green-ink);font-size:15px">Average age by asset type</h2><span class="muted" id="ageSub"></span><span style="flex:1"></span><button class="btn" id="csvAge">Export CSV</button></div>
+      <div class="tscroll" id="tblAge"></div>
+    </div>
   </section>
 
   <section id="tab-assets" class="hide">
@@ -335,17 +339,32 @@ function table(host, cols, rows, opts={}){
   h+='</table>';
   if(sorted.length>lim) h+=`<div style="padding:10px;text-align:center"><button class="btn more">Show all ${sorted.length.toLocaleString()} rows</button></div>`;
   host.innerHTML=h;
-  host.querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; if(st.k===k) st.asc=!st.asc; else {st.k=k; const c=cols.find(c=>c.k===k); st.asc=!!c.l;} table(host,cols,rows,opts); });
+  host.querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; if(st.k===k) st.asc=!st.asc; else {st.k=k; const c=cols.find(c=>c.k===k); st.asc=!!(c.l||c.asc);} table(host,cols,rows,opts); });
   if(opts.onRow) host.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>opts.onRow(tr.dataset.key));
   const m=host.querySelector('.more'); if(m) m.onclick=()=>{ host._all=true; table(host,cols,rows,opts); };
   host._csv = () => [cols.map(c=>'"'+c.n+'"').join(','), ...sorted.map(r=>cols.map(c=>{ const v=r[c.k]; return typeof v==='number'? (isFinite(v)? +v.toFixed(4):'') : '"'+String(v??'').replace(/<[^>]+>/g,'').replace(/"/g,'""')+'"'; }).join(','))].join('\n');
 }
 function downloadCSV(host,name){ const blob=new Blob([host._csv()],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 $('csvLoc').onclick=()=>downloadCSV($('tblLoc'),'mccoys_cpm_locations.csv');
+$('csvAge').onclick=()=>downloadCSV($('tblAge'),'mccoys_fleet_age_by_location.csv');
 $('csvAst').onclick=()=>downloadCSV($('tblAst'),'mccoys_cpm_assets.csv');
 
 // ---------------- views
 function hrsNote(){ const est=F.from<=7, act=F.to>=8; return est&&act? MON[F.from]+'–Aug est., Sep'+(F.to>8?'–Oct':'')+' actual' : est? 'estimated' : 'actual DVIR'; }
+const AGE_CLS=['Truck','LD Vehicle','Trailer','Forklift','TMFL','Ancillary Fleet'];
+function asOf(){ return new Date(2026, F.to+1, 0); }  // last day of the "To" month
+function ageYrs(a){ if(!a.o) return NaN; const d=new Date(a.o+'T00:00:00'); return (asOf()-d)/(365.25*864e5); }
+function ageUnits(a){ return a.r && !a.pseudo && a.o && a.act[F.to]; }   // roster units active in the "To" month
+// average age per location x class, ranked across ALL locations (1 = oldest)
+function ageTable(){
+  const by={};
+  DATA.assets.forEach(a=>{ if(!ageUnits(a)) return; const y=ageYrs(a); if(!isFinite(y)||y<0) return;
+    const L=(by[a.s]=by[a.s]||{}); [a.c,'All'].forEach(c=>{ const g=(L[c]=L[c]||{n:0,sum:0}); g.n++; g.sum+=y; }); });
+  const out={}; Object.entries(by).forEach(([s,L])=>{ out[s]={}; Object.entries(L).forEach(([c,g])=>out[s][c]={n:g.n,avg:g.sum/g.n}); });
+  AGE_CLS.concat(['All']).forEach(c=>{ const list=Object.keys(out).filter(s=>out[s][c]).sort((x,y)=>out[y][c].avg-out[x][c].avg);
+    list.forEach((s,i)=>{ out[s][c].rank=i+1; out[s][c].of=list.length; }); });
+  return out;
+}
 function rangeLabel(){ return F.from===F.to? MON[F.from]+' 2026' : MON[F.from]+'–'+MON[F.to]+' 2026'; }
 function renderOverview(list){
   const o=agg(list);
@@ -367,9 +386,10 @@ function renderOverview(list){
   const crow=CLASSES.concat(['Unassigned']).map(c=>{ const a=agg(list.filter(x=>x.c===c)); if(!a.tot&&!a.actOct) return null;
     const unit = MILE_CLS.has(c)?'mile':HOUR_CLS.has(c)?'hour':c==='Unassigned'?'':'asset-month';
     const rate = MILE_CLS.has(c)?a.tcpm:HOUR_CLS.has(c)?a.cph:c==='Unassigned'?NaN:a.cpam;
-    return {_key:c,c,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate}; }).filter(Boolean);
+    const AU=list.filter(x=>x.c===c&&ageUnits(x)).map(ageYrs).filter(isFinite); const age=AU.length?sum(AU)/AU.length:NaN;
+    return {_key:c,c,age,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate}; }).filter(Boolean);
   table($('tblCls'),[
-    {k:'c',n:'Class',l:1,f:v=>v==='Unassigned'?'Location-level (generic cards etc.)':v},{k:'units',n:'Active units ('+MON[F.to]+')',f:fmtN},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
+    {k:'c',n:'Class',l:1,f:v=>v==='Unassigned'?'Location-level (generic cards etc.)':v},{k:'units',n:'Active units ('+MON[F.to]+')',f:fmtN},{k:'age',n:'Avg age (yrs)',f:v=>isFinite(v)?v.toFixed(1):'—'},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
     {k:'maint',n:'Maintenance',f:fmt$},{k:'fuel',n:'Fuel (all)',f:fmt$},{k:'fixed',n:'Depr. + reg/tax',f:fmt$},{k:'usage',n:'Miles / hours / asset-mo',f:fmtN},{k:'unit',n:'Per',l:1},{k:'rate',n:'Rate',f:v=>fmtR(v)}
   ], crow, {sortKey:'tot'});
 }
@@ -388,6 +408,21 @@ function renderLocations(list){
   ], rows, {sortKey:'tot', selKey:selLoc, onRow:k=>{ selLoc=k; renderLocations(list); renderLocDetail(k); },
     foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,tcpm:T.tcpm,l3:T3.cpm,flH:T.flH,flcph:T.flcph,tmH:T.tmH,tmcph:T.tmcph,cpam:T.cpam}});
   if(selLoc && by[selLoc]) renderLocDetail(selLoc); else $('locDetail').classList.add('hide');
+  renderAge(Object.keys(by));
+}
+function renderAge(locs){
+  const T=ageTable();
+  const shown=locs.filter(s=>T[s]);
+  $('ageSub').textContent='Roster units active at '+asOf().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' · age from origination date · rank among all locations with that asset type (#1 = oldest)';
+  const rows=shown.map(s=>{ const r={_key:s,code:s,name:locName(s),dist:ST[s].district};
+    AGE_CLS.concat(['All']).forEach(c=>{ const g=T[s][c]; r[c]=g?g.avg:NaN; r[c+'_n']=g?g.n:0; r[c+'_r']=g?g.rank:NaN; r[c+'_of']=g?g.of:0; }); return r; });
+  const ac=c=>[{k:c,n:(c==='Ancillary Fleet'?'Ancillary':c==='All'?'All types':c)+' age',f:(v,r)=>isFinite(v)?v.toFixed(1)+' <span class="muted">('+r[c+'_n']+')</span>':'—',title:'Average age in years (unit count)'},
+               {k:c+'_r',n:'Rank',f:(v,r)=>isFinite(v)?'<b>#'+v+'</b> <span class="muted">/ '+r[c+'_of']+'</span>':'—',asc:1}];
+  const cols=[{k:'code',n:'Loc',l:1},{k:'name',n:'Name',l:1},{k:'dist',n:'District',l:1}].concat(...AGE_CLS.concat(['All']).map(ac));
+  // company average row
+  const all=DATA.assets.filter(ageUnits); const foot={code:'',name:'Company average'};
+  AGE_CLS.concat(['All']).forEach(c=>{ const y=all.filter(a=>c==='All'||a.c===c).map(ageYrs).filter(isFinite); foot[c]=y.length?sum(y)/y.length:NaN; foot[c+'_n']=y.length; foot[c+'_r']=NaN; });
+  table($('tblAge'),cols,rows,{sortKey:'All_r',asc:true,foot});
 }
 function renderLocDetail(s){
   const L=assetsInScope(true).filter(a=>a.s===s); const box=$('locDetail'); box.classList.remove('hide');
@@ -396,6 +431,8 @@ function renderLocDetail(s){
   h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Truck/LD CPM</th><th>Forklift hrs</th><th>Forklift $/hr</th><th>TMFL hrs</th><th>TMFL $/hr</th></tr></thead><tbody>';
   ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.flH)}</td><td>${fmtR(m.flcph)}</td><td>${fmtN(m.tmH)}</td><td>${fmtR(m.tmcph)}</td></tr>`; });
   h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.flH)}</td><td>${fmtR(o.flcph)}</td><td>${fmtN(o.tmH)}</td><td>${fmtR(o.tmcph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="7"></td></tr></tfoot></table></div>`;
+  const AT=ageTable()[s]||{};
+  h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Average age vs. all locations <span class="muted" style="font-weight:400">(#1 = oldest)</span></h2><div class="tiles">'+AGE_CLS.concat(['All']).filter(c=>AT[c]).map(c=>`<div class="tile"><div class="k">${c==='All'?'All types':c}</div><div class="v">${AT[c].avg.toFixed(1)} yrs</div><div class="s">#${AT[c].rank} of ${AT[c].of} · ${AT[c].n} unit${AT[c].n===1?"":"s"}</div></div>`).join('')+'</div>';
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Assets at this location</h2><div class="tscroll" id="locAssets"></div>';
   box.innerHTML=h; $('closeDet').onclick=()=>{ selLoc=null; box.classList.add('hide'); render(); };
   assetTable($('locAssets'), L);
@@ -407,12 +444,12 @@ function assetRows(L){
     const flags=[]; if(!a.r) flags.push('<span class="pill d">Disposed</span>'); if(a.pseudo) flags.push('<span class="pill">Location-level</span>'); if(a.fd) flags.push('<span class="pill">Fully depr.</span>');
     if(a.me&&a.me.some(m=>ms.includes(m-1))) flags.push('<span class="pill e">Est. miles</span>'); if(a.he===1) flags.push('<span class="pill e">Hrs all est.</span>'); if(a.cs&&a.cs.startsWith('Implied')) flags.push('<span class="pill e">Implied cost</span>');
     const rate = MILE_CLS.has(a.c)? (mi?tot/mi:NaN) : HOUR_CLS.has(a.c)? (hr?tot/hr:NaN) : NaN;
-    return {_key:a.id, id:a.id, s:a.s, c:a.c, t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
+    return {_key:a.id, id:a.id, s:a.s, c:a.c, age:ageYrs(a), t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
   }).filter(r=>r.tot!==0||r.months>0||r.mi>0);
 }
 function assetTable(host, L){
   table(host,[
-    {k:'id',n:'Unit',l:1},{k:'s',n:'Loc',l:1},{k:'c',n:'Class',l:1},{k:'t',n:'Type',l:1},{k:'mk',n:'Make',l:1},{k:'cost',n:'Orig. cost',f:v=>v?fmt$(v):'—'},{k:'months',n:'Active mo'},
+    {k:'id',n:'Unit',l:1},{k:'s',n:'Loc',l:1},{k:'c',n:'Class',l:1},{k:'t',n:'Type',l:1},{k:'mk',n:'Make',l:1},{k:'age',n:'Age (yrs)',f:v=>isFinite(v)?v.toFixed(1):'—'},{k:'cost',n:'Orig. cost',f:v=>v?fmt$(v):'—'},{k:'months',n:'Active mo'},
     {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'dep',n:'Depr.',f:fmt$},{k:'regtax',n:'Reg/tax',f:fmt$},{k:'tot',n:'Total',f:fmt$},
     {k:'mi',n:'Miles',f:v=>v?fmtN(v):'—'},{k:'hr',n:'Hours',f:v=>v?fmtN(v):'—'},{k:'rate',n:'Cost / mi or hr',f:(v,r)=>isFinite(v)?fmtR(v)+r.unit:'—'},{k:'flags',n:'Flags',l:1}
   ], assetRows(L), {sortKey:'tot', limit:300});
