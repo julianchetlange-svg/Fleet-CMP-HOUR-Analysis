@@ -95,7 +95,6 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
   <button data-tab="overview" class="on">Overview</button>
   <button data-tab="locations">Locations</button>
   <button data-tab="assets">Assets</button>
-  <button data-tab="proposal">Pickup reallocation</button>
   <button data-tab="notes">Data notes &amp; method</button>
 </div></nav>
 <main>
@@ -143,17 +142,6 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
       <div class="toolbar"><input id="aSearch" placeholder="Search unit #, type, make, location…"><span class="muted" id="aCount"></span><span style="flex:1"></span><button class="btn" id="csvAst">Export CSV</button></div>
       <div class="tscroll" id="tblAst"></div>
     </div>
-  </section>
-
-  <section id="tab-proposal" class="hide">
-    <div class="card" style="border-left:5px solid var(--yellow)">
-      <h2>Proposal: reallocate 11 underutilized store pickups</h2>
-      <div class="sub">Remove the pickups from the 11 stores that rank worst on both miles driven and cost per mile, and redeploy them to 10 stores due for lifecycle replacement in 2027 plus the new Canyon Lake store, in place of buying new trucks. Based on Jan–Oct 2026 actuals, annualized.</div>
-      <div class="tiles" id="prTiles" style="grid-template-columns:repeat(3,1fr)"></div>
-    </div>
-    <div class="card"><h2>1 · Stores losing a pickup — P&amp;L savings</h2><div class="sub">Store P&amp;L savings = flat pickup billing of <span id="prRate"></span>/month no longer charged. Actual expense removed excludes fuel, which is assumed to stay because the work moves to another vehicle.</div><div class="tscroll" style="max-height:none" id="prDonor"></div></div>
-    <div class="card"><h2>2 · Where each truck goes — CAPEX avoided</h2><div class="sub">Newest, lowest-mileage trucks are placed at the highest-usage receiving stores. Each placement avoids a <span id="prNew"></span> delivered replacement truck.</div><div class="tscroll" style="max-height:none" id="prPlace"></div></div>
-    <div class="card notes"><h2>Assumptions</h2><ul id="prAssume"></ul></div>
   </section>
 
   <section id="tab-notes" class="hide notes">
@@ -562,39 +550,14 @@ function renderNotes(){
 // ---------------- tabs & render
 let TAB='overview';
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ TAB=b.dataset.tab; document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
-  ['overview','locations','assets','proposal','notes'].forEach(t=>$('tab-'+t).classList.toggle('hide',t!==TAB));
-  document.querySelector('.filters').classList.toggle('hide',TAB==='proposal'||TAB==='notes'); render(); });
+  ['overview','locations','assets','notes'].forEach(t=>$('tab-'+t).classList.toggle('hide',t!==TAB));
+  document.querySelector('.filters').classList.toggle('hide',TAB==='notes'); render(); });
 function render(){
   const list=assetsInScope();
   if(TAB==='overview') renderOverview(list);
   if(TAB==='locations') renderLocations(list);
   if(TAB==='assets') renderAssets(list);
   if(TAB==='notes') renderNotes();
-  if(TAB==='proposal') renderProposal();
-}
-function renderProposal(){
-  const P=DATA.proposal, rows=P.rows, rate=P.rate, nt=P.new_truck, N=rows.length;
-  const bill=rate*12*N, ex=sum(rows.map(r=>r.ex)), fuel=sum(rows.map(r=>r.fuel)), nbv=sum(rows.map(r=>r.nbv)), capex=nt*N, depAv=nt/60*12*N, rtAv=nt*(DATA.rates.tax+DATA.rates.reg)*12*N;
-  $('prRate').textContent='$'+rate.toFixed(2); $('prNew').textContent=fmt$(nt);
-  $('prTiles').innerHTML=[
-    ['CAPEX avoided', fmt$(capex), N+' new pickups × '+fmt$(nt)+' delivered','y'],
-    ['Annual store P&L savings', fmt$(bill), N+' stores × $'+rate.toFixed(2)+' × 12 months','y'],
-    ['Actual annual expense removed', fmt$(ex), 'Depreciation, maintenance, reg & taxes (excl. fuel)',''],
-    ['Fuel that stays', fmt$(fuel), 'Annualized — work picked up by another vehicle',''],
-    ['Depreciation not added (yr 1)', fmt$(depAv), 'New trucks avoided: '+fmt$(nt)+' ÷ 60 × 12 each · plus '+fmt$(rtAv)+' reg & taxes',''],
-    ['Book value redeployed', fmt$(nbv), 'Net book value of the 11 trucks at 10/31/26','']
-  ].map(([k,v,s2,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join('');
-  const D=rows.map(r=>({_key:r.unit,store:r.store+' · '+r.name,unit:r.unit,orig:r.orig.slice(0,7),cost:r.cost,mi:r.mi,annmi:r.annmi,cpm:r.cpm,rank:r.rank,bill:rate*12,ex:r.ex,fuel:r.fuel,nbv:r.nbv,rem:r.rem}));
-  table($('prDonor'),[
-    {k:'store',n:'Store',l:1},{k:'unit',n:'Unit',l:1},{k:'orig',n:'In service',l:1},{k:'cost',n:'Orig. cost',f:fmt$},{k:'mi',n:'Miles YTD',f:fmtN},{k:'annmi',n:'Annual pace',f:fmtN},
-    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'rank',n:'CPM rank',f:v=>'#'+v,asc:1},{k:'bill',n:'P&L savings / yr',f:fmt$},{k:'ex',n:'Actual exp. / yr',f:fmt$},{k:'fuel',n:'Fuel stays',f:fmt$},{k:'nbv',n:'NBV 10/31',f:fmt$},{k:'rem',n:'Depr. mo left',f:fmtN}
-  ], D, {sortKey:'rank', asc:true, foot:{store:'Total — 11 stores',unit:'',cost:sum(D.map(r=>r.cost)),mi:sum(D.map(r=>r.mi)),annmi:sum(D.map(r=>r.annmi)),bill:bill,ex:ex,fuel:fuel,nbv:nbv}});
-  const PL=rows.map(r=>({_key:r.unit,unit:r.unit,from:r.store+' · '+r.name,orig:r.orig.slice(0,7),rem:r.rem,to:r.to+' · '+r.toname,why:r.repl?'Lifecycle replacement':'Fleet addition — new store',repl:r.repl||'—',repl_o:r.repl_o?r.repl_o.slice(0,7):'—',repl_mi:r.repl_mi,capex:nt}));
-  table($('prPlace'),[
-    {k:'unit',n:'Truck',l:1},{k:'from',n:'From',l:1},{k:'orig',n:'In service',l:1},{k:'rem',n:'Depr. mo left',f:fmtN},{k:'to',n:'To',l:1},{k:'why',n:'Reason',l:1,f:v=>v.replace('Fleet addition — new store','New store')},
-    {k:'repl',n:'Replaces',l:1},{k:'repl_o',n:'Its in-service',l:1},{k:'repl_mi',n:'Annual miles at store',f:v=>v?fmtN(v):'New store'},{k:'capex',n:'CAPEX avoided',f:fmt$}
-  ], PL, {sortKey:'repl_mi', foot:{unit:'Total',capex:capex}});
-  $('prAssume').innerHTML=P.assume.map(x=>'<li>'+x+'</li>').join('');
 }
 window.addEventListener('resize',()=>{ if(TAB==='overview') renderOverview(assetsInScope()); });
 $('built').textContent=DATA.built;
