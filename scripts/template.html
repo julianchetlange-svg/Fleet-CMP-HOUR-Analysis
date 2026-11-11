@@ -127,6 +127,11 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
     </div>
     <div class="card hide" id="locDetail"></div>
     <div class="card">
+      <div class="toolbar"><h2 style="margin:0;color:var(--green-ink);font-size:15px">Store-to-door pickups — cost per mile by store</h2><span class="muted" id="pkSub"></span><span style="flex:1"></span><button class="btn" id="csvPk">Export CSV</button></div>
+      <div class="tiles" id="pkTiles"></div>
+      <div class="tscroll" id="tblPk"></div>
+    </div>
+    <div class="card">
       <div class="toolbar"><h2 style="margin:0;color:var(--green-ink);font-size:15px">Average age by asset type</h2><span class="muted" id="ageSub"></span><span style="flex:1"></span><button class="btn" id="csvAge">Export CSV</button></div>
       <div class="tscroll" id="tblAge"></div>
     </div>
@@ -357,6 +362,7 @@ function table(host, cols, rows, opts={}){
 }
 function downloadCSV(host,name){ const blob=new Blob([host._csv()],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 $('csvLoc').onclick=()=>downloadCSV($('tblLoc'),'mccoys_cpm_locations.csv');
+$('csvPk').onclick=()=>downloadCSV($('tblPk'),'mccoys_store_pickup_cpm.csv');
 $('csvAge').onclick=()=>downloadCSV($('tblAge'),'mccoys_fleet_age_by_location.csv');
 $('csvAst').onclick=()=>downloadCSV($('tblAst'),'mccoys_cpm_assets.csv');
 
@@ -376,6 +382,18 @@ function ageTable(){
     list.forEach((s,i)=>{ out[s][c].rank=i+1; out[s][c].of=list.length; }); });
   return out;
 }
+// store-to-door pickup stats per store over the selected months, ranked across ALL stores (1 = highest cost per mile)
+function pickupStats(){
+  const ms=MR(), by={};
+  DATA.assets.forEach(a=>{ if(!isS2D(a)) return; const g=(by[a.s]=by[a.s]||{units:0,miles:0,tot:0,maint:0,fuel:0,dep:0,regtax:0});
+    if(a.act[F.to]) g.units++;
+    ms.forEach(i=>{ g.miles+=a.mi[i]; g.tot+=a.tot[i]; g.maint+=a.maint[i]; g.fuel+=a.fuel_card[i]+a.onsite[i]; g.dep+=a.dep[i]; g.regtax+=a.regtax[i]; }); });
+  const list=Object.keys(by).filter(s=>by[s].miles>0).sort((x,y)=>by[y].tot/by[y].miles-by[x].tot/by[x].miles);
+  list.forEach((s,i)=>{ by[s].cpm=by[s].tot/by[s].miles; by[s].rank=i+1; by[s].of=list.length; });
+  const T={units:0,miles:0,tot:0,maint:0,fuel:0,dep:0,regtax:0}; Object.values(by).forEach(g=>Object.keys(T).forEach(k=>T[k]+=g[k])); T.cpm=T.miles?T.tot/T.miles:NaN;
+  return {by,T,n:list.length};
+}
+function pkBar(v,max){ if(!isFinite(v)) return '—'; const w=Math.max(2,Math.min(100,v/max*100)); return `<span style="display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;width:100%"><span style="display:inline-block;width:110px;height:8px;background:#eef0ea;border-radius:4px;position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:var(--green);border-radius:4px"></span></span><b>$${v.toFixed(2)}</b></span>`; }
 function rangeLabel(){ return F.from===F.to? MON[F.from]+' 2026' : MON[F.from]+'–'+MON[F.to]+' 2026'; }
 function renderOverview(list){
   const o=agg(list);
@@ -421,7 +439,30 @@ function renderLocations(list){
   ], rows, {sortKey:'tot', selKey:selLoc, onRow:k=>{ selLoc=k; renderLocations(list); renderLocDetail(k); },
     foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,dcpm:T.dcpm,dl3:T3.dcpm,pcpm:T.pcpm,tcpm:T.tcpm,l3:T3.cpm,flH:T.flH,flcph:T.flcph,tmH:T.tmH,tmcph:T.tmcph,cpam:T.cpam}});
   if(selLoc && by[selLoc]) renderLocDetail(selLoc); else $('locDetail').classList.add('hide');
+  renderPickups();
   renderAge(Object.keys(by));
+}
+function renderPickups(){
+  const P=pickupStats();
+  const shown=Object.keys(P.by).filter(s=>(F.dist==='all'||ST[s].district===F.dist)&&(F.loc==='all'||s===F.loc));
+  const S={units:0,miles:0,tot:0,maint:0,fuel:0,dep:0,regtax:0}; shown.forEach(s=>Object.keys(S).forEach(k=>S[k]+=P.by[s][k])); const scpm=S.miles?S.tot/S.miles:NaN;
+  $('pkSub').textContent='Pickups at stores 001 Galveston – 121 New Caney · '+rangeLabel()+' · rank among all '+P.n+' stores (#1 = highest cost per mile)';
+  const pm=v=>S.miles?v/S.miles:NaN;
+  $('pkTiles').innerHTML=[
+    ['All-in cost per mile', fmtR(scpm), (shown.length===Object.keys(P.by).length?'All stores':'Selected stores')+' · company '+fmtR(P.T.cpm),'y'],
+    ['Pickup miles', fmtN(S.miles), fmtN(S.units)+' pickups active in '+MON[F.to],''],
+    ['Depreciation / mile', fmtR(pm(S.dep),3), fmtK(S.dep),''],
+    ['Fuel / mile', fmtR(pm(S.fuel),3), fmtK(S.fuel),''],
+    ['Maintenance / mile', fmtR(pm(S.maint),3), 'standard $0.14 × miles',''],
+    ['Reg & taxes / mile', fmtR(pm(S.regtax),3), fmtK(S.regtax),'']
+  ].map(([k,v,s2,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join('');
+  const max=Math.max(...shown.map(s=>P.by[s].cpm).filter(isFinite),1);
+  const rows=shown.map(s=>{ const g=P.by[s]; const m=g.miles||NaN; return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:g.units,miles:g.miles,dep:g.dep/m,fuel:g.fuel/m,maint:g.maint/m,regtax:g.regtax/m,tot:g.tot,cpm:g.cpm,rank:g.rank,of:g.of}; });
+  table($('tblPk'),[
+    {k:'rank',n:'Rank',f:(v,r)=>isFinite(v)?'<b>#'+v+'</b> <span class="muted">/ '+r.of+'</span>':'—',asc:1},{k:'code',n:'Loc',l:1},{k:'name',n:'Store',l:1},{k:'dist',n:'District',l:1},{k:'units',n:'Pickups',f:fmtN},{k:'miles',n:'Miles',f:fmtN},
+    {k:'dep',n:'Depr / mi',f:v=>fmtR(v,3)},{k:'fuel',n:'Fuel / mi',f:v=>fmtR(v,3)},{k:'maint',n:'Maint / mi',f:v=>fmtR(v,3)},{k:'regtax',n:'Reg+tax / mi',f:v=>fmtR(v,3)},{k:'tot',n:'Total cost',f:fmt$},{k:'cpm',n:'All-in CPM',f:v=>pkBar(v,max)}
+  ], rows, {sortKey:'rank', asc:true, onRow:k=>{ selLoc=k; renderLocations(assetsInScope()); renderLocDetail(k); },
+    foot:{rank:NaN,code:'',name:'Selected stores',units:S.units,miles:S.miles,dep:pm(S.dep),fuel:pm(S.fuel),maint:pm(S.maint),regtax:pm(S.regtax),tot:S.tot,cpm:scpm}});
 }
 function renderAge(locs){
   const T=ageTable();
@@ -444,6 +485,18 @@ function renderLocDetail(s){
   h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Delivery CPM</th><th>Store pickup CPM</th><th>Truck/LD CPM</th><th>Forklift hrs</th><th>Forklift $/hr</th><th>TMFL hrs</th><th>TMFL $/hr</th></tr></thead><tbody>';
   ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.dcpm)}</td><td>${fmtR(m.pcpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.flH)}</td><td>${fmtR(m.flcph)}</td><td>${fmtN(m.tmH)}</td><td>${fmtR(m.tmcph)}</td></tr>`; });
   h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.dcpm)}</td><td>${fmtR(o.pcpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.flH)}</td><td>${fmtR(o.flcph)}</td><td>${fmtN(o.tmH)}</td><td>${fmtR(o.tmcph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="9"></td></tr></tfoot></table></div>`;
+  const PS=pickupStats(), pg=PS.by[s];
+  if(isStore(s)){
+    h+='<div class="card" style="margin:16px 0 0;border-left:5px solid var(--yellow)"><h2>Store-to-door pickups</h2>';
+    if(pg && pg.miles>0){ const pm=v=>v/pg.miles, cp=PS.T, cm=v=>v/cp.miles;
+      h+=`<div class="sub">${rangeLabel()} · ${pg.units} pickup${pg.units===1?'':'s'} · ${fmtN(pg.miles)} miles · rank among ${pg.of} stores (#1 = highest cost per mile)</div><div class="tiles">`+
+      [['All-in cost per mile',fmtR(pg.cpm),'Company stores: '+fmtR(cp.cpm),'y'],['Rank',`#${pg.rank} <span style="font-size:15px;color:var(--muted)">of ${pg.of}</span>`,pg.cpm>cp.cpm?'Above company average':'Below company average',''],
+       ['Depreciation / mile',fmtR(pm(pg.dep),3),'Company '+fmtR(cm(cp.dep),3),''],['Fuel / mile',fmtR(pm(pg.fuel),3),'Company '+fmtR(cm(cp.fuel),3),''],
+       ['Maintenance / mile',fmtR(pm(pg.maint),3),'Standard $0.14',''],['Reg & taxes / mile',fmtR(pm(pg.regtax),3),'Company '+fmtR(cm(cp.regtax),3),'']]
+       .map(([k,v,s2,c])=>`<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join('')+'</div>';
+    } else h+='<div class="sub">No store-to-door pickups with miles at this store in the selected months.</div>';
+    h+='</div>';
+  }
   const AT=ageTable()[s]||{};
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Average age vs. all locations <span class="muted" style="font-weight:400">(#1 = oldest)</span></h2><div class="tiles">'+AGE_CLS.concat(['All']).filter(c=>AT[c]).map(c=>`<div class="tile"><div class="k">${c==='All'?'All types':c}</div><div class="v">${AT[c].avg.toFixed(1)} yrs</div><div class="s">#${AT[c].rank} of ${AT[c].of} · ${AT[c].n} unit${AT[c].n===1?"":"s"}</div></div>`).join('')+'</div>';
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Assets at this location</h2><div class="tscroll" id="locAssets"></div>';
