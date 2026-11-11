@@ -233,6 +233,19 @@ for r in prop_raw.itertuples(index=False):
         else:
             add_loc(s, 'propane', m, c)
 
+# pickup / cargo van standard maintenance rate (replaces recorded maintenance)
+PICKUP_RATE = 0.14
+maint_rec = {}
+std_units = []
+for uid, a in A.items():
+    if a['cls'] == 'LD Vehicle' and str(a['type']).strip() in ('Pickup', 'Cargo Van', ''):
+        a['pickup'] = str(a['type']).strip() != 'Cargo Van'
+        a['std'] = True
+        maint_rec[uid] = maint.get(uid, np.zeros(10)).copy()
+        maint[uid] = mil.get(uid, np.zeros(10)) * PICKUP_RATE
+        std_units.append(uid)
+pk_rec = float(sum(v.sum() for v in maint_rec.values())); pk_std = float(sum(maint[u].sum() for u in std_units))
+
 # ---------------------------------------------------------------- output
 COMPS = ['maint', 'fuel_card', 'onsite', 'propane', 'dep', 'reg', 'tax']
 G = dict(maint=maint, fuel_card=fcard, onsite=onsite, propane=propane, dep=dep, reg=reg, tax=tax)
@@ -248,7 +261,8 @@ for uid, a in A.items():
         o=a['orig'], st=a['status'], r=a['roster'], fd=a.get('fully_dep', False),
         act=[1 if m in a['active'] else 0 for m in M],
         **{c: r2(rows[c]) for c in COMPS}, mi=r2(mi), hr=[round(float(v), 1) for v in hr],
-        me=sorted(mil_est.get(uid, [])), he=(0 if uid in hours_actual_units else (1 if uid in hrs else 0))))
+        me=sorted(mil_est.get(uid, [])), pk=1 if a.get('pickup') else 0, std=1 if a.get('std') else 0,
+        mrec=r2(maint_rec[uid]) if uid in maint_rec else None, he=(0 if uid in hours_actual_units else (1 if uid in hrs else 0))))
 loc_out = [dict(s=s, comp=c, v=r2(v)) for (s, c), v in loc_level.items()]
 
 # ---------------------------------------------------------------- notes / data issues
@@ -276,6 +290,8 @@ issues.append(dict(cat='Hours', item='Hours flagged by the Check column (possibl
     list='; '.join(f"{u}: {c}" for u, c in zip(chk.Unit, chk.Check))))
 nohrs = R[R['Asset Class'].isin(['Forklift', 'TMFL']) & ~R['Asset Name'].isin(H.Unit)]
 issues.append(dict(cat='Hours', item='Roster forklifts/TMFLs with no hours', n=len(nohrs), detail='Costs included; no cost per hour.', list=', '.join(map(str, nohrs['Asset Name']))))
+issues.append(dict(cat='Spend', item='Pickups & cargo vans: standard maintenance rate $0.14/mile', n=len(std_units),
+    detail=f'Fexa captures little pickup spend (over half of pickups show none). Recorded maintenance of {fmt(pk_rec)} replaced by $0.14 × miles = {fmt(pk_std)} (160K-mile life, 3/4-ton gas, job-site use with occasional towing). Recorded spend still shown per unit on the Assets tab.', list=''))
 issues.append(dict(cat='Spend', item='Multi-asset invoices split evenly across assets', n=int((SP.n_assets > 1).sum()),
     detail=f'Same invoice/work order total repeated on each asset; split removes {fmt(split_extra)} of double counting.', list=''))
 issues.append(dict(cat='Spend', item='Non-fleet equipment spend excluded from cost per mile', n=len(nonfleet),
@@ -289,7 +305,7 @@ issues.append(dict(cat='Fuel', item='Propane from 2027 forecast file used as 202
 # location assignment differences for roster units (informational)
 recon = dict(
     maint_src=float(SP[amt].sum()), maint_split_removed=float(split_extra), maint_nonfleet=float(nonfleet.amt.sum()), maint_regtax=float(regtax_ex.amt.sum()),
-    maint_assets=float(sum(v.sum() for v in maint.values())),
+    maint_assets=float(sum(v.sum() for v in maint.values())), pickup_recorded=pk_rec, pickup_std=pk_std,
     fuel_card_src=float(F['Net Cost'].sum()), fuel_card_out=float(sum(v.sum() for v in fcard.values()) + gen.sum()),
     onsite_src=float(sum(onsite_src.values())), onsite_out=float(sum(v.sum() for v in onsite.values()) + sum(v.sum() for (s, c), v in loc_level.items() if c == 'onsite')),
     propane_src=float(sum(prop_src.values())), propane_out=float(sum(v.sum() for v in propane.values()) + sum(v.sum() for (s, c), v in loc_level.items() if c == 'propane')),

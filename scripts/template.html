@@ -35,7 +35,7 @@ main{max-width:1500px;margin:0 auto;padding:18px 24px 40px}
 .btn:hover{background:var(--green);color:#fff}
 .btn.y{background:var(--yellow);border-color:#d9c500;color:var(--green-ink)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:16px}
-#tiles{grid-template-columns:repeat(4,1fr)}
+#tiles{grid-template-columns:repeat(5,1fr)}
 @media(max-width:900px){#tiles{grid-template-columns:repeat(2,1fr)}}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;border-top:4px solid var(--green)}
 .tile.y{border-top-color:var(--yellow)}
@@ -113,7 +113,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
     <div class="grid2">
       <div class="card"><h2>Monthly cost by component</h2><div class="sub">Stacked total cost per month. Hover a bar for the breakdown.</div>
         <div class="legend" id="lgCost"></div><div class="chart" id="chCost"></div></div>
-      <div class="card"><h2>Cost per mile by month</h2><div class="sub">All-in = every fleet cost ÷ truck &amp; LD miles. Delivery fleet = trucks, LD vehicles, trailers &amp; TMFLs ÷ the same miles. Hollow markers = more than 5% of that month's miles estimated.</div>
+      <div class="card"><h2>Cost per mile by month</h2><div class="sub">All-in = every fleet cost ÷ truck &amp; LD miles. Delivery fleet = trucks, LD vehicles, trailers &amp; TMFLs ÷ the same miles. Store pickups = store-to-door pickups at stores 001–121. Hollow markers = more than 5% of that month's miles estimated.</div>
         <div class="legend" id="lgCpm"></div><div class="chart" id="chCpm"></div></div>
     </div>
     <div class="card"><h2>Cost breakdown &amp; run rate</h2><div class="sub">Run rate annualizes the selected months (average month × 12).</div><div id="tblComp"></div></div>
@@ -144,7 +144,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
       <h2>Method</h2>
       <h3>Cost components</h3>
       <ul>
-        <li><b>Maintenance</b> — subcontractor invoices by invoice date. Invoices repeated on several assets of one work order are split evenly. Registration/tax invoices are removed (calculated below instead). Non-fleet equipment is excluded.</li>
+        <li><b>Maintenance</b> — subcontractor invoices by invoice date. <b>Pickups and cargo vans use a standard $0.14/mile</b> instead of recorded invoices, because little pickup spend flows through Fexa. Invoices repeated on several assets of one work order are split evenly. Registration/tax invoices are removed (calculated below instead). Non-fleet equipment is excluded.</li>
         <li><b>Fuel card</b> — WEX net cost (after discounts, including DEF) by unit and transaction month. Generic cards with no unit are charged to the billed store.</li>
         <li><b>Onsite diesel</b> — tank gallons × site price at 353 Dayton, 356 Midland and 359 Burnet, split across the site's trucks by that month's miles.</li>
         <li><b>Propane</b> — monthly gallons × plan rate by location, split across that location's forklifts by hours. TMFLs carry no propane.</li>
@@ -155,6 +155,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
       <ul>
         <li><b>All-in cost per mile</b> = all fleet costs at the selected locations ÷ truck &amp; LD telematics miles.</li>
         <li><b>Delivery fleet cost per mile</b> = all costs of trucks, LD vehicles, trailers and TMFLs (the delivery equipment) ÷ truck &amp; LD miles.</li>
+        <li><b>Store-to-door pickup cost per mile</b> = all costs of pickups at stores 001 Galveston – 121 New Caney ÷ those pickups' miles.</li>
         <li><b>Truck &amp; LD cost per mile</b> = costs of trucks and LD vehicles only ÷ their miles.</li>
         <li><b>Cost per hour</b> = shown separately for forklifts and TMFLs: each class's costs ÷ its own hours. Hours Jan–Aug are estimates (lifetime average); DVIR actuals start 8/24.</li>
         <li><b>Cost per asset-month</b> = trailer / ancillary cost ÷ active asset-months.</li>
@@ -185,6 +186,8 @@ const COMPS = [
   {k:'regtax', n:'Registration & taxes', col:'var(--s6)'}
 ];
 const DEL_CLS = new Set(['Truck','LD Vehicle','Trailer','TMFL']);
+const isStore = s => /^\d+$/.test(s) && +s>=1 && +s<=121;   // 001 Galveston – 121 New Caney
+const isS2D = a => a.pk===1 && a.c==='LD Vehicle' && isStore(a.s);
 const MILE_CLS = new Set(['Truck','LD Vehicle']), HOUR_CLS = new Set(['Forklift','TMFL']);
 const CLASSES = ['Truck','LD Vehicle','Trailer','Forklift','TMFL','Ancillary Fleet'];
 DATA.assets.forEach(a=>{ a.regtax = a.reg.map((v,i)=>v+a.tax[i]); a.tot = a.maint.map((v,i)=>v+a.fuel_card[i]+a.onsite[i]+a.propane[i]+a.dep[i]+a.regtax[i]); });
@@ -243,7 +246,7 @@ const MR = () => { const r=[]; for(let i=F.from;i<=F.to;i++) r.push(i); return r
 // aggregate a set of assets over the month range
 function agg(list, months){
   months = months||MR();
-  const o = {n:0, comp:{}, tot:0, miles:0, hours:0, mileCost:0, delCost:0, hourCost:0, flH:0, flC:0, tmH:0, tmC:0, trlCost:0, trlAM:0, actOct:0, byMonth:MON.map(()=>({tot:0,miles:0,estMiles:0,mileCost:0,delCost:0,c:{}}))};
+  const o = {n:0, comp:{}, tot:0, miles:0, hours:0, mileCost:0, delCost:0, pkCost:0, pkMiles:0, hourCost:0, flH:0, flC:0, tmH:0, tmC:0, trlCost:0, trlAM:0, actOct:0, byMonth:MON.map(()=>({tot:0,miles:0,estMiles:0,mileCost:0,delCost:0,pkCost:0,pkMiles:0,c:{}}))};
   COMPS.forEach(c=>o.comp[c.k]=0);
   list.forEach(a=>{
     if(a.act[F.to] && !a.pseudo) o.actOct++;
@@ -252,6 +255,7 @@ function agg(list, months){
       COMPS.forEach(c=>{ const v=a[c.k][i]; o.comp[c.k]+=v; bm.c[c.k]=(bm.c[c.k]||0)+v; });
       if(MILE_CLS.has(a.c)){ o.miles+=a.mi[i]; o.mileCost+=t; bm.miles+=a.mi[i]; bm.mileCost+=t; if(a.me.includes(i+1)) bm.estMiles+=a.mi[i]; }
       if(DEL_CLS.has(a.c)){ o.delCost+=t; bm.delCost+=t; }
+      if(isS2D(a)){ o.pkCost+=t; o.pkMiles+=a.mi[i]; bm.pkCost+=t; bm.pkMiles+=a.mi[i]; }
       if(HOUR_CLS.has(a.c)){ o.hours+=a.hr[i]; o.hourCost+=t; }
       if(a.c==='Forklift'){ o.flH+=a.hr[i]; o.flC+=t; }
       if(a.c==='TMFL'){ o.tmH+=a.hr[i]; o.tmC+=t; }
@@ -262,6 +266,7 @@ function agg(list, months){
   o.cpm = o.miles? o.tot/o.miles : NaN;
   o.tcpm = o.miles? o.mileCost/o.miles : NaN;
   o.dcpm = o.miles? o.delCost/o.miles : NaN;
+  o.pcpm = o.pkMiles? o.pkCost/o.pkMiles : NaN;
   o.cph = o.hours? o.hourCost/o.hours : NaN;
   o.flcph = o.flH? o.flC/o.flH : NaN;
   o.tmcph = o.tmH? o.tmC/o.tmH : NaN;
@@ -305,7 +310,7 @@ function costChart(o){
 }
 function cpmChart(o){
   const host=$('chCpm'); const W=host.clientWidth||500, H=300, pl=50, pr=84, pt=14, pb=28;
-  const ms=MR(); const series=[{n:'All-in',col:'var(--green)',f:b=>b.miles?b.tot/b.miles:NaN},{n:'Delivery fleet',col:'var(--s1)',f:b=>b.miles?b.delCost/b.miles:NaN},{n:'Truck & LD',col:'var(--s2)',f:b=>b.miles?b.mileCost/b.miles:NaN}];
+  const ms=MR(); const series=[{n:'All-in',col:'var(--green)',f:b=>b.miles?b.tot/b.miles:NaN},{n:'Delivery fleet',col:'var(--s1)',f:b=>b.miles?b.delCost/b.miles:NaN},{n:'Truck & LD',col:'var(--s2)',f:b=>b.miles?b.mileCost/b.miles:NaN},{n:'Store pickups',col:'var(--s5)',f:b=>b.pkMiles?b.pkCost/b.pkMiles:NaN}];
   const vals=ms.flatMap(i=>series.map(se=>se.f(o.byMonth[i]))).filter(isFinite);
   if(!vals.length){ host.innerHTML='<div class="muted" style="padding:40px 0;text-align:center">No truck or LD miles in the current selection.</div>'; $('lgCpm').innerHTML=''; return; }
   const max=niceMax(Math.max(...vals)*1.1);
@@ -380,6 +385,7 @@ function renderOverview(list){
     ['Run rate (annualized)', fmtK(o.run), 'avg '+fmtK(o.tot/o.months)+' / month × 12','y'],
     ['All-in cost per mile', fmtR(o.cpm), 'Last 3 months: '+fmtR(last3.cpm), ''],
     ['Delivery fleet cost per mile', fmtR(o.dcpm), 'Trucks, LD, trailers & TMFLs · last 3 mo: '+fmtR(last3.dcpm),'y'],
+    ['Store-to-door pickup cost per mile', fmtR(o.pcpm), 'Stores 001–121 · '+fmtN(o.pkMiles)+' pickup miles','y'],
     ['Truck & LD cost per mile', fmtR(o.tcpm), fmtN(o.miles)+' miles',''],
     ['Forklift cost / hour', fmtR(o.flcph), fmtN(o.flH)+' hours · '+hrsNote(),''],
     ['TMFL cost / hour', fmtR(o.tmcph), fmtN(o.tmH)+' hours · '+hrsNote(),'y'],
@@ -406,14 +412,14 @@ function renderLocations(list){
   const by={}; list.forEach(a=>(by[a.s]=by[a.s]||[]).push(a));
   const ms=MR(), l3=ms.slice(-3);
   const rows=Object.entries(by).map(([s,L])=>{ const o=agg(L), t=agg(L,l3);
-    return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:o.actOct,tot:o.tot,run:o.run,maint:o.comp.maint,fuel:o.comp.fuel_card+o.comp.onsite+o.comp.propane,fixed:o.comp.dep+o.comp.regtax,miles:o.miles,cpm:o.cpm,dcpm:o.dcpm,dl3:t.dcpm,tcpm:o.tcpm,l3:t.cpm,flH:o.flH,flcph:o.flcph,tmH:o.tmH,tmcph:o.tmcph,cpam:o.cpam}; });
+    return {_key:s,code:s,name:locName(s),dist:ST[s].district,units:o.actOct,tot:o.tot,run:o.run,maint:o.comp.maint,fuel:o.comp.fuel_card+o.comp.onsite+o.comp.propane,fixed:o.comp.dep+o.comp.regtax,miles:o.miles,cpm:o.cpm,dcpm:o.dcpm,dl3:t.dcpm,pcpm:o.pcpm,pkMiles:o.pkMiles,tcpm:o.tcpm,l3:t.cpm,flH:o.flH,flcph:o.flcph,tmH:o.tmH,tmcph:o.tmcph,cpam:o.cpam}; });
   const T=agg(list), T3=agg(list,l3);
   table($('tblLoc'),[
     {k:'code',n:'Loc',l:1},{k:'name',n:'Name',l:1},{k:'dist',n:'District',l:1},{k:'units',n:'Units',f:fmtN,title:'Active units in the last selected month'},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
     {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'fixed',n:'Depr+reg/tax',f:fmt$},{k:'miles',n:'Truck/LD miles',f:fmtN},
-    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'l3',n:'All-in last 3 mo',f:v=>fmtR(v)},{k:'dcpm',n:'Delivery CPM',f:v=>fmtR(v),title:'Trucks + LD + trailers + TMFLs ÷ truck & LD miles'},{k:'dl3',n:'Delivery last 3 mo',f:v=>fmtR(v)},{k:'tcpm',n:'Truck/LD CPM',f:v=>fmtR(v)},{k:'flH',n:'Forklift hrs',f:fmtN},{k:'flcph',n:'Forklift $/hr',f:v=>fmtR(v)},{k:'tmH',n:'TMFL hrs',f:fmtN},{k:'tmcph',n:'TMFL $/hr',f:v=>fmtR(v)},{k:'cpam',n:'Trailer / asset-mo',f:v=>fmtR(v,0)}
+    {k:'cpm',n:'All-in CPM',f:v=>fmtR(v)},{k:'l3',n:'All-in last 3 mo',f:v=>fmtR(v)},{k:'dcpm',n:'Delivery CPM',f:v=>fmtR(v),title:'Trucks + LD + trailers + TMFLs ÷ truck & LD miles'},{k:'dl3',n:'Delivery last 3 mo',f:v=>fmtR(v)},{k:'pcpm',n:'Store pickup CPM',f:v=>fmtR(v),title:'Store-to-door pickups, stores 001–121: all-in pickup cost ÷ pickup miles'},{k:'tcpm',n:'Truck/LD CPM',f:v=>fmtR(v)},{k:'flH',n:'Forklift hrs',f:fmtN},{k:'flcph',n:'Forklift $/hr',f:v=>fmtR(v)},{k:'tmH',n:'TMFL hrs',f:fmtN},{k:'tmcph',n:'TMFL $/hr',f:v=>fmtR(v)},{k:'cpam',n:'Trailer / asset-mo',f:v=>fmtR(v,0)}
   ], rows, {sortKey:'tot', selKey:selLoc, onRow:k=>{ selLoc=k; renderLocations(list); renderLocDetail(k); },
-    foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,dcpm:T.dcpm,dl3:T3.dcpm,tcpm:T.tcpm,l3:T3.cpm,flH:T.flH,flcph:T.flcph,tmH:T.tmH,tmcph:T.tmcph,cpam:T.cpam}});
+    foot:{code:'',name:'All selected',units:T.actOct,tot:T.tot,run:T.run,maint:T.comp.maint,fuel:T.comp.fuel_card+T.comp.onsite+T.comp.propane,fixed:T.comp.dep+T.comp.regtax,miles:T.miles,cpm:T.cpm,dcpm:T.dcpm,dl3:T3.dcpm,pcpm:T.pcpm,tcpm:T.tcpm,l3:T3.cpm,flH:T.flH,flcph:T.flcph,tmH:T.tmH,tmcph:T.tmcph,cpam:T.cpam}});
   if(selLoc && by[selLoc]) renderLocDetail(selLoc); else $('locDetail').classList.add('hide');
   renderAge(Object.keys(by));
 }
@@ -435,9 +441,9 @@ function renderLocDetail(s){
   const L=assetsInScope(true).filter(a=>a.s===s); const box=$('locDetail'); box.classList.remove('hide');
   const ms=MR(); const o=agg(L);
   let h=`<div class="detail-head"><h2>${locLabel(s)}</h2><span class="pill">${ST[s].district}</span><span style="flex:1"></span><button class="btn" id="closeDet">Close</button></div>`;
-  h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Delivery CPM</th><th>Truck/LD CPM</th><th>Forklift hrs</th><th>Forklift $/hr</th><th>TMFL hrs</th><th>TMFL $/hr</th></tr></thead><tbody>';
-  ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.dcpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.flH)}</td><td>${fmtR(m.flcph)}</td><td>${fmtN(m.tmH)}</td><td>${fmtR(m.tmcph)}</td></tr>`; });
-  h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.dcpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.flH)}</td><td>${fmtR(o.flcph)}</td><td>${fmtN(o.tmH)}</td><td>${fmtR(o.tmcph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="8"></td></tr></tfoot></table></div>`;
+  h+='<div class="tscroll" style="max-height:none"><table><thead><tr><th class="l">Month</th>'+COMPS.map(c=>`<th>${c.n}</th>`).join('')+'<th>Total</th><th>Truck/LD miles</th><th>All-in CPM</th><th>Delivery CPM</th><th>Store pickup CPM</th><th>Truck/LD CPM</th><th>Forklift hrs</th><th>Forklift $/hr</th><th>TMFL hrs</th><th>TMFL $/hr</th></tr></thead><tbody>';
+  ms.forEach(i=>{ const m=agg(L,[i]); const bm=m.byMonth[i]; h+=`<tr><td class="l">${MON[i]}${isEst(bm)?' <span class="pill e">est. miles</span>':''}</td>`+COMPS.map(c=>`<td>${fmt$(m.comp[c.k])}</td>`).join('')+`<td><b>${fmt$(m.tot)}</b></td><td>${fmtN(m.miles)}</td><td>${fmtR(m.cpm)}</td><td>${fmtR(m.dcpm)}</td><td>${fmtR(m.pcpm)}</td><td>${fmtR(m.tcpm)}</td><td>${fmtN(m.flH)}</td><td>${fmtR(m.flcph)}</td><td>${fmtN(m.tmH)}</td><td>${fmtR(m.tmcph)}</td></tr>`; });
+  h+=`</tbody><tfoot><tr><td class="l">Total</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k])}</td>`).join('')+`<td>${fmt$(o.tot)}</td><td>${fmtN(o.miles)}</td><td>${fmtR(o.cpm)}</td><td>${fmtR(o.dcpm)}</td><td>${fmtR(o.pcpm)}</td><td>${fmtR(o.tcpm)}</td><td>${fmtN(o.flH)}</td><td>${fmtR(o.flcph)}</td><td>${fmtN(o.tmH)}</td><td>${fmtR(o.tmcph)}</td></tr><tr><td class="l">Run rate</td>`+COMPS.map(c=>`<td>${fmt$(o.comp[c.k]/o.months*12)}</td>`).join('')+`<td>${fmt$(o.run)}</td><td colspan="9"></td></tr></tfoot></table></div>`;
   const AT=ageTable()[s]||{};
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Average age vs. all locations <span class="muted" style="font-weight:400">(#1 = oldest)</span></h2><div class="tiles">'+AGE_CLS.concat(['All']).filter(c=>AT[c]).map(c=>`<div class="tile"><div class="k">${c==='All'?'All types':c}</div><div class="v">${AT[c].avg.toFixed(1)} yrs</div><div class="s">#${AT[c].rank} of ${AT[c].of} · ${AT[c].n} unit${AT[c].n===1?"":"s"}</div></div>`).join('')+'</div>';
   h+='<h2 style="margin:16px 0 8px;font-size:14px;color:var(--green-ink)">Assets at this location</h2><div class="tscroll" id="locAssets"></div>';
@@ -450,6 +456,8 @@ function assetRows(L){
   return L.map(a=>{ const g=k=>sum(ms.map(i=>a[k][i])); const tot=g('tot'), mi=g('mi'), hr=g('hr');
     const flags=[]; if(!a.r) flags.push('<span class="pill d">Disposed</span>'); if(a.pseudo) flags.push('<span class="pill">Location-level</span>'); if(a.fd) flags.push('<span class="pill">Fully depr.</span>');
     if(a.me&&a.me.some(m=>ms.includes(m-1))) flags.push('<span class="pill e">Est. miles</span>'); if(a.he===1) flags.push('<span class="pill e">Hrs all est.</span>'); if(a.cs&&a.cs.startsWith('Implied')) flags.push('<span class="pill e">Implied cost</span>');
+    if(a.std) flags.push('<span class="pill e" title="Maintenance at $0.14/mile standard">Std $0.14/mi · recorded '+fmt$(sum(ms.map(i=>a.mrec[i])))+'</span>');
+    if(isS2D(a)) flags.push('<span class="pill">Store-to-door</span>');
     const rate = MILE_CLS.has(a.c)? (mi?tot/mi:NaN) : HOUR_CLS.has(a.c)? (hr?tot/hr:NaN) : NaN;
     return {_key:a.id, id:a.id, s:a.s, c:a.c, age:ageYrs(a), t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
   }).filter(r=>r.tot!==0||r.months>0||r.mi>0);
@@ -474,7 +482,7 @@ function renderNotes(){
     iss.map(r=>`<tr><td class="l"><span class="pill">${r.cat}</span></td><td class="l"><b>${r.item}</b></td><td>${(r.n||0).toLocaleString()}</td><td class="l">${r.detail}</td><td class="list">${r.list||''}</td></tr>`).join('')+'</tbody></table>';
   const R=DATA.recon; const nfTot=Object.values(DATA.nonfleet).reduce((s,a)=>s+sum(a),0);
   const rows=[
-    ['Maintenance — source invoices', R.maint_src],['  less: duplicate multi-asset invoice amounts (split)', -R.maint_split_removed],['  less: non-fleet equipment', -R.maint_nonfleet],['  less: registration / tax invoices', -R.maint_regtax],['Maintenance in report', R.maint_assets],
+    ['Maintenance — source invoices', R.maint_src],['  less: duplicate multi-asset invoice amounts (split)', -R.maint_split_removed],['  less: non-fleet equipment', -R.maint_nonfleet],['  less: registration / tax invoices', -R.maint_regtax],['  less: recorded pickup / cargo van maintenance', -R.pickup_recorded],['  plus: pickup / cargo van standard $0.14 × miles', R.pickup_std],['Maintenance in report', R.maint_assets],
     ['Fuel card — source net cost', R.fuel_card_src],['Fuel card in report', R.fuel_card_out],
     ['Onsite diesel — source', R.onsite_src],['Onsite diesel in report', R.onsite_out],
     ['Propane — source (after bottle fix, excl. Canyon Lake)', R.propane_src],['Propane in report', R.propane_out],
