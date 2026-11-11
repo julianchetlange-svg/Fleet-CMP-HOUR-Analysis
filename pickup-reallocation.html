@@ -137,7 +137,7 @@ function tbl(host,cols,rows,foot){
   h+='</tbody>'; if(foot) h+='<tfoot><tr>'+cols.map(c=>`<td class="${c.l?'l':''}">${foot[c.k]!==undefined?(c.f?c.f(foot[c.k],foot):foot[c.k]):''}</td>`).join('')+'</tr></tfoot>';
   host.innerHTML=h+'</table>';
 }
-const odoTxt=(v,r)=>fmtN(v)+(r.odo_est?' <span class="pill e">est.</span>':'')+(r.odo_conf?' <span class="pill" title="Confirmed by Fleet 11/11/26">confirmed</span>':'');
+const odoTxt=(v,r)=>fmtN(v)+(r.odo_est?' <span class="pill e">est.</span>':'');
 tbl($('tDonor'),[
   {k:'rank',n:'Rank',f:v=>'<b>#'+v+'</b>'},{k:'store',n:'Store',l:1,f:(v,r)=>r.name?v.padStart(3,'0')+' '+r.name:v},{k:'dist',n:'District',l:1},{k:'unit',n:'Unit',l:1},{k:'orig',n:'In service',l:1,f:v=>v.slice(0,7)},
   {k:'odo',n:'Odometer',f:odoTxt},{k:'mi',n:'Miles YTD',f:fmtN},{k:'annmi',n:'Annual pace',f:fmtN},{k:'cpm',n:'All-in CPM',f:fmtR},
@@ -157,7 +157,7 @@ $('notes').innerHTML=[
   'Company savings are the '+fmt$(capex)+' of CAPEX avoided and the depreciation, registration and taxes of new trucks that are not bought. Sale proceeds from the replaced trucks are not included.',
   'Actual expense is Jan–Oct 2026 depreciation, standard maintenance ($0.14/mile), registration and taxes, annualized. Fuel is excluded because the work moves to another vehicle at the store.',
   'Placement follows mileage: trucks are ranked by odometer (lowest first) and matched to receiving stores ranked by their current pickup\'s annual miles (highest first). Canyon Lake has no history, so it is placed last. Millworks (450) replaces 599007.',
-  'Odometers are the latest valid fuel-card reading. Bryan (600008, 30,795) and Odessa (600005, 39,155) were confirmed by Fleet on 11/11/26 because their fuel-card readings are unusable — the Odessa card shows odometers from several vehicles, which also explains its high fuel cost per mile.'
+  'Odometers are the latest valid fuel-card reading. Bryan (600008) and Odessa (600005) use odometers provided by Fleet because their fuel-card readings are unusable — the Odessa card shows odometers from several vehicles, which also explains its high fuel cost per mile.'
 ].map(x=>'<li>'+x+'</li>').join('');
 </script>
 </body>
