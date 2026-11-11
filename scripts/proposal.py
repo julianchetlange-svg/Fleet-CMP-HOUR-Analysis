@@ -17,7 +17,9 @@ cpm_order = sorted([s for s in by if by[s][1] > 0], key=lambda s: -by[s][0] / by
 mi_order = sorted([s for s in by if by[s][1] > 0], key=lambda s: by[s][1])
 donor_stores = [s for s in cpm_order[:15] if s in mi_order[:15]]
 
+ODO_CONFIRMED = {'600008': 30795, '600005': 39155}   # confirmed by Fleet 11/11/26
 def odo(unit, a):
+    if unit in ODO_CONFIRMED: return dict(odo=float(ODO_CONFIRMED[unit]), odo_dt='2026-11-11', odo_est=False, odo_conf=True)
     o, dt = (None, None) if unit == '600005' else clean_odo(F, int(unit))   # Odessa card shows several vehicles' odometers
     if o: return dict(odo=o, odo_dt=dt, odo_est=False)
     if unit == '601036': return dict(odo=14701.0, odo_dt='2026-08-10', odo_est=False)   # last valid reading; later entries are the unit #
