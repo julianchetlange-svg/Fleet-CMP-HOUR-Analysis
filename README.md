@@ -2,7 +2,7 @@
 
 Interactive report (`index.html`) of fleet cost by location and month, January–October 2026.
 
-Separate analysis: **`pickup-reallocation.html`** — 2027 proposal to redeploy 11 underutilized store pickups to lifecycle-replacement stores and the new Canyon Lake store (store P&L savings and CAPEX avoided).
+The 2027 store pickup reallocation proposal lives in its own repo: Store-Pickup-Reallocation.
 
 **Costs:** maintenance spend, WEX fuel card, onsite diesel (353/356/359), propane, straight-line depreciation
 (trucks/LD/trailers 60 mo; TMFLs/forklifts/ancillary 84 mo), registration (0.05%/mo) and taxes (0.0667%/mo) on original cost.
@@ -11,4 +11,4 @@ Separate analysis: **`pickup-reallocation.html`** — 2027 proposal to redeploy 
 
 Open `index.html` in a browser, or enable GitHub Pages (Settings → Pages → Deploy from branch `main`, `/root`).
 
-`scripts/` holds the build: `build_data.py` combines the monthly source files into `data.json`; `build_html.py` injects it and the logo into `template.html`. `proposal.py` + `build_proposal.py` build the pickup reallocation page from the same dataset. Source data files are not stored in this repo.
+`scripts/` holds the build: `build_data.py` combines the monthly source files into `data.json`; `build_html.py` injects it and the logo into `template.html`. Source data files are not stored in this repo.
