@@ -66,6 +66,17 @@ th.sorted.asc::after{content:" ▴"}
 tbody tr:hover{background:var(--yellow-soft)}
 tbody tr.click{cursor:pointer}
 tbody tr.sel{background:#fff3a0}
+.clsT tr.clsRow{background:#f6f8f3}
+.clsT tr.clsRow:hover{background:var(--yellow-soft)}
+.clsT .caret{display:inline-block;width:14px;color:var(--green)}
+.clsT tr.subhead td{background:#fffbe0;font-size:12px;color:var(--text-2)}
+.clsT tr.subhead a{color:var(--green);text-decoration:none;font-weight:600}
+.clsT tr.subhead a.on{color:var(--green-ink);text-decoration:underline}
+.clsT tr.assetRow td{font-size:13px;color:var(--text-2)}
+.clsT td.trunc{max-width:130px;overflow:hidden;text-overflow:ellipsis}
+.clsT th,.clsT td{padding:7px 7px}
+.clsT th{white-space:normal;vertical-align:bottom}
+.clsT td:first-child{min-width:120px}
 tfoot td{font-weight:700;background:#eef2ea;border-top:2px solid var(--green)}
 .tscroll{max-height:640px;overflow:auto;border:1px solid var(--line);border-radius:6px}
 .pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;background:#e8efe9;color:var(--green-ink)}
@@ -117,7 +128,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
         <div class="legend" id="lgCpm"></div><div class="chart" id="chCpm"></div></div>
     </div>
     <div class="card"><h2>Cost breakdown &amp; run rate</h2><div class="sub">Run rate annualizes the selected months (average month × 12).</div><div id="tblComp"></div></div>
-    <div class="card"><h2>Measures by asset class</h2><div class="sub">Trucks &amp; LD vehicles per mile · forklifts and TMFLs each per hour · trailers &amp; ancillary per asset-month.</div><div id="tblCls"></div></div>
+    <div class="card"><h2>Measures by asset class</h2><div class="sub">Trucks &amp; LD vehicles per mile · forklifts and TMFLs each per hour · trailers &amp; ancillary per asset-month. Click a class to expand its assets.</div><div id="tblCls"></div></div>
   </section>
 
   <section id="tab-locations" class="hide">
@@ -419,10 +430,52 @@ function renderOverview(list){
     const rate = MILE_CLS.has(c)?a.tcpm:HOUR_CLS.has(c)?a.cph:c==='Unassigned'?NaN:a.cpam;
     const AU=list.filter(x=>x.c===c&&ageUnits(x)).map(ageYrs).filter(isFinite); const age=AU.length?sum(AU)/AU.length:NaN;
     return {_key:c,c,age,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate}; }).filter(Boolean);
-  table($('tblCls'),[
-    {k:'c',n:'Class',l:1,f:v=>v==='Unassigned'?'Location-level (generic cards etc.)':v},{k:'units',n:'Active units ('+MON[F.to]+')',f:fmtN},{k:'age',n:'Avg age (yrs)',f:v=>isFinite(v)?v.toFixed(1):'—'},{k:'tot',n:'Total cost',f:fmt$},{k:'run',n:'Run rate',f:fmt$},
-    {k:'maint',n:'Maintenance',f:fmt$},{k:'fuel',n:'Fuel (all)',f:fmt$},{k:'fixed',n:'Depr. + reg/tax',f:fmt$},{k:'usage',n:'Miles / hours / asset-mo',f:fmtN},{k:'unit',n:'Per',l:1},{k:'rate',n:'Rate',f:v=>fmtR(v)}
-  ], crow, {sortKey:'tot'});
+  renderClassTable(list, crow);
+
+}
+
+// ---- class table with expandable asset rows
+const OPEN_CLS = new Set();
+let clsSort = {k:'tot', asc:false};
+function renderClassTable(list, crow){
+  const ms=MR();
+  const cols=[['c','Class / unit','l'],['t','Type','l'],['s','Loc','l'],['units','Active ('+MON[F.to]+') / mo'],['age','Age (yrs)'],['tot','Total cost'],['run','Run rate'],['maint','Maintenance'],['fuel','Fuel (all)'],['fixed','Depr+reg/tax'],['usage','Mi / hrs / asset-mo'],['rate','Rate']];
+  const cell=(k,v,r)=>{
+    if(k==='tot'||k==='run'||k==='maint'||k==='fuel'||k==='fixed') return fmt$(v);
+    if(k==='age') return isFinite(v)?v.toFixed(1):'—';
+    if(k==='usage') return v?fmtN(v):'—';
+    if(k==='units') return fmtN(v);
+    if(k==='rate') return isFinite(v)?fmtR(v)+({mile:'/mi',hour:'/hr','asset-month':'/asset-mo'}[r.unit]||''):'—';
+    return v??'';
+  };
+  let h='<div class="tscroll" style="max-height:none"><table class="clsT"><thead><tr>'+cols.map(([k,n,l])=>`<th class="${l?'l':''}">${n}</th>`).join('')+'</tr></thead><tbody>';
+  crow.sort((x,y)=>y.tot-x.tot).forEach(r=>{
+    const open=OPEN_CLS.has(r.c), canOpen=r.c!=='Unassigned';
+    h+=`<tr class="clsRow${canOpen?' click':''}" data-c="${r.c}"><td class="l"><b>${canOpen?`<span class="caret">${open?'▾':'▸'}</span> `:''}${r.c==='Unassigned'?'Location-level':r.c}</b></td><td></td><td></td>`+
+      cols.slice(3).map(([k,,l])=>`<td class="${l?'l':''}"><b>${cell(k,r[k],r)}</b></td>`).join('')+'</tr>';
+    if(open){
+      const unit=MILE_CLS.has(r.c)?'mile':HOUR_CLS.has(r.c)?'hour':'asset-month';
+      const A=list.filter(x=>x.c===r.c && !x.pseudo).map(a=>{
+        const g=k=>sum(ms.map(i=>a[k][i])); const tot=g('tot'), mi=g('mi'), hr=g('hr'), am=sum(ms.map(i=>a.act[i]));
+        const usage=MILE_CLS.has(r.c)?mi:HOUR_CLS.has(r.c)?hr:am;
+        return {id:a.id, t:a.t||'—', s:a.s, units:am, age:ageYrs(a), tot, run:am?tot/am*12:0, maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), fixed:g('dep')+g('regtax'), usage, unit, rate:usage?tot/usage:NaN, disp:!a.r, std:a.std, tarps:a.tarps, st:a.st};
+      }).filter(x=>x.tot!==0||x.units>0||x.usage>0).sort((x,y)=>{ const k=clsSort.k; const p=x[k], q=y[k]; return typeof p==='string'? (clsSort.asc?p.localeCompare(q,undefined,{numeric:true}):q.localeCompare(p,undefined,{numeric:true})) : (clsSort.asc?(p||0)-(q||0):(q||0)-(p||0)); });
+      h+=`<tr class="subhead"><td colspan="${cols.length}" class="l">${A.length.toLocaleString()} ${r.c} units · sort: `+
+        [['tot','Total cost'],['rate','Rate'],['usage','Usage'],['age','Age'],['id','Unit #'],['t','Type'],['s','Location']].map(([k,n])=>`<a href="#" class="srt${clsSort.k===k?' on':''}" data-k="${k}">${n}${clsSort.k===k?(clsSort.asc?' ▴':' ▾'):''}</a>`).join(' · ')+
+        ` · <a href="#" class="csvCls" data-c="${r.c}">Export CSV</a></td></tr>`;
+      A.forEach(x=>{ h+=`<tr class="assetRow"><td class="l">&nbsp;&nbsp;&nbsp;&nbsp;${x.id}${x.disp?' <span class="pill d">'+(x.st&&x.st.startsWith('In service')?'Book only':'Disposed')+'</span>':''}${x.tarps?' <span class="pill" title="Rolling tarp '+x.tarps.join(', ')+' depreciation included">+ tarp</span>':''}${x.std?' <span class="pill e" title="Maintenance at $0.14/mile standard">Std</span>':''}</td><td class="l trunc" title="${x.t}">${x.t}</td><td class="l" title="${locName(x.s)}">${x.s}</td>`+
+        cols.slice(3).map(([k,,l])=>`<td class="${l?'l':''}">${k==='units'?x.units+' mo':cell(k,x[k],x)}</td>`).join('')+'</tr>'; });
+      r._assets=A;
+    }
+  });
+  h+='</tbody></table></div><div class="muted" style="font-size:12px;margin-top:6px">Click a class to list its assets. Asset rows show active months, age, cost for the selected months, and run rate (cost ÷ active months × 12).</div>';
+  const host=$('tblCls'); host.innerHTML=h;
+  host.querySelectorAll('tr.clsRow.click').forEach(tr=>tr.onclick=()=>{ const c=tr.dataset.c; OPEN_CLS.has(c)?OPEN_CLS.delete(c):OPEN_CLS.add(c); renderClassTable(list,crow); });
+  host.querySelectorAll('a.srt').forEach(a=>a.onclick=e=>{ e.preventDefault(); const k=a.dataset.k; if(clsSort.k===k) clsSort.asc=!clsSort.asc; else clsSort={k,asc:['id','t','s'].includes(k)}; renderClassTable(list,crow); });
+  host.querySelectorAll('a.csvCls').forEach(a=>a.onclick=e=>{ e.preventDefault(); const r=crow.find(x=>x.c===a.dataset.c); const A=r._assets||[];
+    const hd=['Unit','Type','Location','Active months','Age (yrs)','Total cost','Run rate','Maintenance','Fuel','Depr + reg/tax','Usage','Per','Rate','Disposed'];
+    const csv=[hd.join(',')].concat(A.map(x=>[x.id,'"'+x.t.replace(/"/g,'""')+'"','"'+x.s+' '+locName(x.s)+'"',x.units,isFinite(x.age)?x.age.toFixed(1):'',x.tot.toFixed(2),x.run.toFixed(2),x.maint.toFixed(2),x.fuel.toFixed(2),x.fixed.toFixed(2),x.usage.toFixed(1),x.unit,isFinite(x.rate)?x.rate.toFixed(4):'',x.disp?'Y':''].join(','))).join('\n');
+    const bl=new Blob([csv],{type:'text/csv'}); const l=document.createElement('a'); l.href=URL.createObjectURL(bl); l.download='mccoys_'+r.c.toLowerCase().replace(/ /g,'_')+'_assets.csv'; l.click(); });
 }
 
 let selLoc=null;
@@ -507,10 +560,11 @@ function renderLocDetail(s){
 function assetRows(L){
   const ms=MR();
   return L.map(a=>{ const g=k=>sum(ms.map(i=>a[k][i])); const tot=g('tot'), mi=g('mi'), hr=g('hr');
-    const flags=[]; if(!a.r) flags.push('<span class="pill d">Disposed</span>'); if(a.pseudo) flags.push('<span class="pill">Location-level</span>'); if(a.fd) flags.push('<span class="pill">Fully depr.</span>');
+    const flags=[]; if(!a.r) flags.push('<span class="pill d">'+(a.st&&a.st.startsWith('In service')?'Book only':'Disposed')+'</span>'); if(a.pseudo) flags.push('<span class="pill">Location-level</span>'); if(a.fd) flags.push('<span class="pill">Fully depr.</span>');
     if(a.me&&a.me.some(m=>ms.includes(m-1))) flags.push('<span class="pill e">Est. miles</span>'); if(a.he===1) flags.push('<span class="pill e">Hrs all est.</span>'); if(a.cs&&a.cs.startsWith('Implied')) flags.push('<span class="pill e">Implied cost</span>');
     if(a.std) flags.push('<span class="pill e" title="Maintenance at $0.14/mile standard">Std $0.14/mi · recorded '+fmt$(sum(ms.map(i=>a.mrec[i])))+'</span>');
     if(isS2D(a)) flags.push('<span class="pill">Store-to-door</span>');
+    if(a.tarps) flags.push('<span class="pill" title="Rolling tarp '+a.tarps.join(', ')+' depreciation included">+ tarp '+a.tarps.join(', ')+'</span>');
     const rate = MILE_CLS.has(a.c)? (mi?tot/mi:NaN) : HOUR_CLS.has(a.c)? (hr?tot/hr:NaN) : NaN;
     return {_key:a.id, id:a.id, s:a.s, c:a.c, age:ageYrs(a), t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
   }).filter(r=>r.tot!==0||r.months>0||r.mi>0);

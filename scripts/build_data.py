@@ -58,7 +58,7 @@ for _, r in R.iterrows():
         make=r['Asset Manufacturer Name'] if isinstance(r['Asset Manufacturer Name'], str) else '', owned=owned, cost=cost,
         orig=od.strftime('%Y-%m-%d'), status=r['Asset Status'], roster=True, costsrc='Roster' if cost else None)
 
-suffix_cls = {'pup': 'LD Vehicle', 'flb': 'Truck', 'ttr': 'Truck', 'vnb': 'Truck', 'conv': 'Truck', 'van': 'LD Vehicle'}
+suffix_cls = {'car': 'LD Vehicle', 'pup': 'LD Vehicle', 'flb': 'Truck', 'ttr': 'Truck', 'vnb': 'Truck', 'conv': 'Truck', 'van': 'LD Vehicle'}
 def cls_from_vehicle(v):
     for tok in str(v).lower().split('-'):
         if tok in suffix_cls: return suffix_cls[tok]
@@ -91,15 +91,21 @@ split_extra = (SP[amt] - SP['amt']).sum()
 
 for _, r in SP[(SP.bucket == 'asset') & ~SP.Unit.isin(roster_ids)].drop_duplicates('Unit').iterrows():
     add_nonroster(int(r.Unit), TMPL.get(str(r['Asset Template Name']).strip()), r['Asset Template Name'])
+SUFFIX_TYPE = {'car': 'Car', 'flb': 'Flatbed', 'ttr': 'Tractor', 'conv': 'Conveyor', 'vnb': 'Van Body', 'pup': 'Pickup', 'van': 'Van'}
+def type_from_vehicle(v):
+    for tok in str(v).lower().split('-'):
+        if tok in SUFFIX_TYPE: return SUFFIX_TYPE[tok]
+    return ''
 for _, r in Mi[Mi.Unit.notna() & ~Mi.Unit.isin(roster_ids)].drop_duplicates('Unit').iterrows():
-    add_nonroster(int(r.Unit), cls_from_vehicle(r.Vehicle))
+    add_nonroster(int(r.Unit), cls_from_vehicle(r.Vehicle), type_from_vehicle(r.Vehicle))
 for _, r in F[F.Unit.notna() & ~F.Unit.isin(roster_ids)].drop_duplicates('Unit').iterrows():
     add_nonroster(int(r.Unit), 'Truck' if 'Diesel' in str(r['Product Description']) else 'LD Vehicle')
 for _, r in H[~H.Unit.isin(roster_ids)].drop_duplicates('Unit').iterrows():
     add_nonroster(int(r.Unit), 'TMFL' if r.Fleet == 'TMFL' else 'Forklift')
 book_cls = lambda c: 'Forklift' if 'Forklift' in c else ('LD Vehicle' if 'Light' in c else 'Truck')
-for _, r in D[D.Unit.notna() & ~D.Unit.isin(roster_ids)].drop_duplicates('Unit').iterrows():
-    add_nonroster(int(r.Unit), book_cls(str(r['Spend Category'])))
+TARP = D.Unit.between(545000, 548999)   # rolling tarp systems / trailer equipment, capitalized separately from the trailer
+for _, r in D[D.Unit.notna() & ~D.Unit.isin(roster_ids) & ~TARP].drop_duplicates('Unit').iterrows():
+    add_nonroster(int(r.Unit), 'Trailer' if str(int(r.Unit))[:2] in ('48', '53') else book_cls(str(r['Spend Category'])))
 
 # rental / sub units without a unit number (telematics only)
 rent = Mi.Unit.isna()
@@ -200,6 +206,29 @@ for uid, a in A.items():
             add(tax, uid, m, a['cost'] * TAX_RATE)
             if a['cls'] in REG_CLASSES: add(reg, uid, m, a['cost'] * REG_RATE)
 
+# rolling tarp systems: match to their trailer (explicit trailer # in the description, else tarp # - 14000), add book depreciation + taxes
+tarp_rows = []
+TD = D[TARP & D.Unit.notna()].copy()
+TD['desc'] = TD['Asset ID'].astype(str).str.extract(r'\((.*)\)')[0].fillna('')
+for u, g in TD.groupby('Unit'):
+    u = int(u); tamt = float(g['Depreciation Amount'].sum()); desc = '; '.join(sorted(set(g.desc)))
+    m = re.search(r'\b(53\d{4})\b', desc)
+    cand = A.get(u - 14000)
+    tgt = int(m.group(1)) if m and int(m.group(1)) in A else (u - 14000 if cand and cand['cls'] == 'Trailer' and 'Flatbed' in str(cand['type'])
+                                                                and cand['store'] == g['store'].iloc[0] else None)
+    if tgt:
+        a = A[tgt]; a.setdefault('tarps', []).append(str(u))
+        for mth in a['active']:
+            add(dep, tgt, mth, tamt); add(tax, tgt, mth, tamt * 60 * TAX_RATE)
+        tarp_rows.append((u, tgt, a['store'], tamt, desc))
+    else:
+        st = g['store'].iloc[0]; ensure_store(st)
+        A[u] = dict(id=u, store=st, cls='Trailer', type='Rolling tarp / trailer equipment', make='', owned=True, cost=round(tamt * 60, 2),
+                    costsrc='Implied from Mar-26 book depreciation', orig='', status='In service (book only)', roster=False, active=list(M))
+        for mth in M:
+            add(dep, u, mth, tamt); add(tax, u, mth, tamt * 60 * TAX_RATE)
+        tarp_rows.append((u, None, st, tamt, desc))
+
 # onsite diesel -> trucks/LD at the site by that month's miles
 OS = pd.read_excel(U + 'a387c44d-Onsite_Fuel_Cost_353_356_359_Jan_Oct2026.xlsx', sheet_name='Monthly Cost', header=3).iloc[:10]
 onsite_src = {}
@@ -262,7 +291,7 @@ for uid, a in A.items():
         act=[1 if m in a['active'] else 0 for m in M],
         **{c: r2(rows[c]) for c in COMPS}, mi=r2(mi), hr=[round(float(v), 1) for v in hr],
         me=sorted(mil_est.get(uid, [])), pk=1 if a.get('pickup') else 0, std=1 if a.get('std') else 0,
-        mrec=r2(maint_rec[uid]) if uid in maint_rec else None, he=(0 if uid in hours_actual_units else (1 if uid in hrs else 0))))
+        mrec=r2(maint_rec[uid]) if uid in maint_rec else None, tarps=a.get('tarps'), he=(0 if uid in hours_actual_units else (1 if uid in hrs else 0))))
 loc_out = [dict(s=s, comp=c, v=r2(v)) for (s, c), v in loc_level.items()]
 
 # ---------------------------------------------------------------- notes / data issues
@@ -275,6 +304,13 @@ issues.append(dict(cat='Assets', item='Units not on the 10/31 roster (disposed d
 nocost = [a for a in nr if not a['cost']]
 issues.append(dict(cat='Assets', item='Disposed units with no book record (no depreciation / reg / tax)', n=len(nocost), detail='Only actual spend and fuel are carried.', list=', '.join(str(a['id']) for a in nocost)))
 rnocost = R[(R['Asset Original Value'].isna()) | (R['Asset Original Value'] <= 0)]
+tm = [r for r in tarp_rows if r[1]]; tu = [r for r in tarp_rows if not r[1]]
+issues.append(dict(cat='Assets', item='Rolling tarp systems matched to trailers', n=len(tm),
+    detail=f'Capitalized separately on the books (545xxx–548xxx). Matched by the trailer # in the asset description, else tarp # − 14000 when that is a flatbed trailer at the same location. Their book depreciation ({fmt(sum(r[3] for r in tm))}/mo) and taxes are added to the trailer for all active months; no registration.',
+    list=', '.join(f'{r[0]}→{r[1]}' for r in tm)))
+issues.append(dict(cat='Assets', item='Tarp / trailer equipment with no matching trailer', n=len(tu),
+    detail=f'Kept as their own Trailer-class rows at their cost center for Jan–Oct: {fmt(sum(r[3] for r in tu))}/mo depreciation plus taxes, no registration. Confirm which trailers these belong to.',
+    list='; '.join(f'{r[0]} ({r[2]}): {r[4][:60]}' for r in tu)))
 issues.append(dict(cat='Assets', item='Roster units with no original value', n=len(rnocost), detail='No depreciation, registration or taxes calculated.', list=', '.join(map(str, rnocost['Asset Name']))))
 issues.append(dict(cat='Assets', item='Fully depreciated owned units', n=sum(1 for a in A.values() if a.get('fully_dep')), detail='$0 depreciation; registration and taxes still charged on original cost.', list=''))
 issues.append(dict(cat='Assets', item='Leased units', n=int((R['Asset Ownership'] != 'Company Owned').sum()), detail='No depreciation. Taxes/registration applied only where an original value exists.', list=''))
