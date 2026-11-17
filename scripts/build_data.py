@@ -214,25 +214,26 @@ def months_active(a):
 for a in A.values():
     a['active'] = sorted(months_active(a))
 
-# depreciation & registration / taxes
+# depreciation = actual book depreciation (Jan–Sep files; October carries September) for every unit on the books
 book_cat = D[D.Unit.notna()].groupby('Unit')['Spend Category'].first()
+def book_months(u):
+    """months a unit is charged book depreciation: first book month .. last (October if still on the latest file)"""
+    bm = BOOKM.get(u)
+    if not bm: return set()
+    end = 10 if LAST_BM in bm else book_end(u)
+    return set(range(min(bm), end + 1))
 for uid, a in A.items():
     act = a['active']
     if not act: continue
+    bmonths = book_months(uid) if isinstance(uid, int) else set()
+    for m in sorted(set(act) & bmonths):
+        add(dep, uid, m, book_amt(uid, m))
     if a['roster']:
-        if a['owned'] and a['cost']:
-            od = pd.to_datetime(a['orig']); life = LIFE[a['cls']]
-            for m in act:
-                mi = (2026 - od.year) * 12 + (m - od.month)
-                if 0 <= mi < life: add(dep, uid, m, a['cost'] / life)
-        a['fully_dep'] = bool(a['owned'] and a['cost'] and ((2026 - pd.to_datetime(a['orig']).year) * 12 + (10 - pd.to_datetime(a['orig']).month)) >= LIFE[a['cls']])
+        a['fully_dep'] = bool(a['owned'] and uid not in BOOKM or (uid in BOOKM and LAST_BM not in BOOKM[uid] and a['owned']))
+        a['on_books'] = uid in BOOKM
     elif isinstance(uid, int) and uid in BOOKM:
         life = 84 if 'Forklift' in str(book_cat[uid]) else 60
-        first_bm = min(BOOKM[uid])
-        a['cost'] = round(BOOKM[uid][first_bm] * life, 2); a['costsrc'] = 'Implied from 2026 book depreciation'
-        be = book_end(uid)
-        for m in act:
-            if be is None or m <= be or BOOKM[uid].get(LAST_BM): add(dep, uid, m, book_amt(uid, m))
+        a['cost'] = round(BOOKM[uid][min(BOOKM[uid])] * life, 2); a['costsrc'] = 'Implied from 2026 book depreciation'
     if a['cost']:
         for m in act:
             add(tax, uid, m, a['cost'] * TAX_RATE)
@@ -345,9 +346,9 @@ issues.append(dict(cat='Assets', item='Rolling tarp systems matched to trailers'
 issues.append(dict(cat='Assets', item='Tarp / trailer equipment with no matching trailer', n=len(tu),
     detail=f'Kept as their own Trailer-class rows at their cost center for Jan–Oct: {fmt(sum(r[3] for r in tu))}/mo depreciation plus taxes, no registration. Confirm which trailers these belong to.',
     list='; '.join(f'{r[0]} ({r[2]}): {r[4][:60]}' for r in tu)))
-issues.append(dict(cat='Assets', item='Roster units with no original value', n=len(rnocost), detail='No depreciation, registration or taxes calculated.', list=', '.join(map(str, rnocost['Asset Name']))))
-issues.append(dict(cat='Assets', item='Fully depreciated owned units', n=sum(1 for a in A.values() if a.get('fully_dep')), detail='$0 depreciation; registration and taxes still charged on original cost.', list=''))
-issues.append(dict(cat='Assets', item='Leased units', n=int((R['Asset Ownership'] != 'Company Owned').sum()), detail='No depreciation. Taxes/registration applied only where an original value exists.', list=''))
+issues.append(dict(cat='Assets', item='Roster units with no original value', n=len(rnocost), detail='Depreciation comes from the books if present; no registration or taxes calculated.', list=', '.join(map(str, rnocost['Asset Name']))))
+issues.append(dict(cat='Assets', item='Owned roster units fully depreciated / off the books by September', n=sum(1 for a in A.values() if a.get('fully_dep')), detail='Depreciation follows the books, so it stops the month a unit drops off; registration and taxes still charged on original cost.', list=''))
+issues.append(dict(cat='Assets', item='Leased units', n=int((R['Asset Ownership'] != 'Company Owned').sum()), detail='Depreciation only if on the books (none expected). Taxes/registration applied only where an original value exists.', list=''))
 if len(filled_df):
     issues.append(dict(cat='Miles', item='Missing telematics months filled with neighbor-month average', n=len(filled_df),
         detail='A vehicle reported in the months before and after but not in a month gets the neighbor average. Estimated miles: ' +
@@ -385,7 +386,7 @@ recon = dict(
     propane_src=float(sum(prop_src.values())), propane_out=float(sum(v.sum() for v in propane.values()) + sum(v.sum() for (s, c), v in loc_level.items() if c == 'propane')),
     miles_src=float(Mi.Distance.sum()), miles_filled=float(filled_df.Miles.sum()), miles_out=float(sum(v.sum() for v in mil.values())),
     hours_src=float(H.Hours.sum()), hours_out=float(sum(v.sum() for v in hrs.values())),
-    dep_out=float(sum(v.sum() for v in dep.values())), reg_out=float(sum(v.sum() for v in reg.values())), tax_out=float(sum(v.sum() for v in tax.values())),
+    dep_out=float(sum(v.sum() for v in dep.values())), book_jan_sep=float(sum(v for u in BOOKM for b, v in BOOKM[u].items())), dep_jan_sep=float(sum(v[:9].sum() for v in dep.values())), reg_out=float(sum(v.sum() for v in reg.values())), tax_out=float(sum(v.sum() for v in tax.values())),
 )
 nf = nonfleet.groupby(['store', 'Month']).amt.sum()
 nonfleet_out = {}

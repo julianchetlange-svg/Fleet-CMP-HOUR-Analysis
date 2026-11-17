@@ -164,7 +164,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
         <li><b>Fuel card</b> — WEX net cost (after discounts, including DEF) by unit and transaction month. Generic cards with no unit are charged to the billed store.</li>
         <li><b>Onsite diesel</b> — tank gallons × site price at 353 Dayton, 356 Midland and 359 Burnet, split across the site's trucks by that month's miles.</li>
         <li><b>Propane</b> — monthly gallons × plan rate by location, split across that location's forklifts by hours. TMFLs carry no propane.</li>
-        <li><b>Depreciation</b> — straight line from original cost: trucks, LD vehicles and trailers 60 months; TMFLs, forklifts and ancillary 84 months. Starts in the origination month and stops when fully depreciated. Leased units have none. Disposed units use their 2026 monthly book depreciation (January–September files; October uses September) and stop when they drop off the books.</li>
+        <li><b>Depreciation</b> — actual book depreciation (GAAP) from the monthly fleet depreciation detail, January–September; October carries each unit's September amount. A unit is charged from its first month on the books until it drops off (fully depreciated or disposed). Rolling tarp systems are added to their trailer.</li>
         <li><b>Registration &amp; taxes</b> — taxes 0.0667% of original cost per month (all classes); registration 0.05% per month (trucks, LD vehicles, trailers). Charged in active months, including after an asset is fully depreciated.</li>
       </ul>
       <h3>Measures</h3>
@@ -593,7 +593,7 @@ function renderNotes(){
     ['Fuel card — source net cost', R.fuel_card_src],['Fuel card in report', R.fuel_card_out],
     ['Onsite diesel — source', R.onsite_src],['Onsite diesel in report', R.onsite_out],
     ['Propane — source (after bottle fix, excl. Canyon Lake)', R.propane_src],['Propane in report', R.propane_out],
-    ['Depreciation (calculated + book for disposed)', R.dep_out],['Registration (calculated)', R.reg_out],['Taxes (calculated)', R.tax_out]
+    ['Book depreciation in source files (Jan–Sep)', R.book_jan_sep],['Depreciation in report, Jan–Sep', R.dep_jan_sep],['  plus: October at each unit\'s September amount', R.dep_out-R.dep_jan_sep],['Depreciation in report (Jan–Oct)', R.dep_out],['Registration (calculated)', R.reg_out],['Taxes (calculated)', R.tax_out]
   ];
   let h='<table><thead><tr><th class="l">Line</th><th>Amount</th></tr></thead><tbody>'+rows.map(([n,v])=>`<tr><td class="l">${n.startsWith('  ')?'&nbsp;&nbsp;&nbsp;&nbsp;'+n.trim():'<b>'+n+'</b>'}</td><td>${fmt$(v)}</td></tr>`).join('');
   h+=`<tr><td class="l"><b>Telematics miles — source</b></td><td>${fmtN(R.miles_src)}</td></tr><tr><td class="l">&nbsp;&nbsp;&nbsp;&nbsp;plus: estimated miles for missing vehicle-months</td><td>${fmtN(R.miles_filled)}</td></tr><tr><td class="l"><b>Miles in report</b></td><td>${fmtN(R.miles_out)}</td></tr>`;
