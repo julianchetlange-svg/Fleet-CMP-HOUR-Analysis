@@ -278,9 +278,13 @@ rnocost = R[(R['Asset Original Value'].isna()) | (R['Asset Original Value'] <= 0
 issues.append(dict(cat='Assets', item='Roster units with no original value', n=len(rnocost), detail='No depreciation, registration or taxes calculated.', list=', '.join(map(str, rnocost['Asset Name']))))
 issues.append(dict(cat='Assets', item='Fully depreciated owned units', n=sum(1 for a in A.values() if a.get('fully_dep')), detail='$0 depreciation; registration and taxes still charged on original cost.', list=''))
 issues.append(dict(cat='Assets', item='Leased units', n=int((R['Asset Ownership'] != 'Company Owned').sum()), detail='No depreciation. Taxes/registration applied only where an original value exists.', list=''))
-issues.append(dict(cat='Miles', item='Missing telematics months filled with neighbor-month average', n=len(filled_df),
-    detail='May and July were re-pulled 11/17/26 (Utilization report) and are actual. The Utilization report lists ~50 more low-mileage vehicles (pool, loaner, sold units) than the Fuel and EV Energy report used for other months; a vehicle reported in the months before and after but not in a month gets the neighbor average. Estimated miles: ' +
-    ', '.join(f"{MN[m-1]} {int(v):,}" for m, v in filled_df.groupby('Month').Miles.sum().items()), list=''))
+if len(filled_df):
+    issues.append(dict(cat='Miles', item='Missing telematics months filled with neighbor-month average', n=len(filled_df),
+        detail='A vehicle reported in the months before and after but not in a month gets the neighbor average. Estimated miles: ' +
+        ', '.join(f"{MN[m-1]} {int(v):,}" for m, v in filled_df.groupby('Month').Miles.sum().items()), list=''))
+else:
+    issues.append(dict(cat='Miles', item='Telematics miles: all months actual', n=10,
+        detail='All ten months use the Geotab Utilization report re-pulled 11/17/26 (Jan–Sep) plus the original October Utilization report. No miles are estimated.', list=''))
 issues.append(dict(cat='Miles', item='Sub / rental units with no unit number', n=int(rent.groupby(Mi['aid']).any().sum()),
     detail='Kept as their own rows at their store (mostly 359). They share onsite diesel by miles.', list=', '.join(sorted(Mi.loc[rent, 'Vehicle'].unique()))))
 issues.append(dict(cat='Hours', item='Forklift / TMFL hours Jan–Aug are estimates', n=int(H.Unit.nunique()),
