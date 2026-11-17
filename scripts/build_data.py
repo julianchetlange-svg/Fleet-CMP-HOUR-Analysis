@@ -41,8 +41,31 @@ F = fuel(); F['acct'] = F['Account Name'].map(sc)
 Mi = miles(); Mi['Store'] = Mi['Store'].map(sc)
 Mi.loc[~Mi['Store'].astype(str).str.fullmatch(r'\d{1,3}[A-Z]{0,2}'), 'Store'] = None  # telematics groups like 'Sale Pending'
 H = hours()
-D = pd.read_excel(U + 'eed968bc-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail.xlsx', sheet_name=1)
+# monthly book depreciation files (month -> file); add more months here as they arrive
+BOOK_FILES = {3: ('eed968bc-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(sheet_name=1)),
+              5: ('ff2992e1-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6))}
+_bk = []
+for bm, (p, kw) in BOOK_FILES.items():
+    x = pd.read_excel(U + p + '.xlsx', **kw); x = x[x['Asset ID'].notna()].copy(); x['BM'] = bm; _bk.append(x)
+D = pd.concat(_bk, ignore_index=True)
 D['Unit'] = pd.to_numeric(D['Asset Identifier'], errors='coerce')
+BMS = sorted(BOOK_FILES); LAST_BM = BMS[-1]
+BOOKM = {}   # unit -> {book month: amount}
+for (u, bm), v in D[D.Unit.notna()].groupby(['Unit', 'BM'])['Depreciation Amount'].sum().items():
+    BOOKM.setdefault(int(u), {})[bm] = float(v)
+def book_amt(u, m):
+    bm = BOOKM.get(u, {})
+    if not bm: return 0.0
+    prior = [b for b in bm if b <= m]
+    return bm[max(prior)] if prior else bm[min(bm)]
+def book_end(u):
+    # last month the unit is on the books: present in the latest file -> that month; dropped earlier -> month before the next file
+    bm = BOOKM.get(u, {})
+    if not bm: return None
+    last = max(bm)
+    if last == LAST_BM: return last
+    nxt = min(b for b in BMS if b > last)
+    return nxt - 1
 D['store'] = D['Cost Center'].astype(str).str.split(' ').str[0].map(sc)
 tmpl = pd.read_excel(U + 'c06aef92-Current_Assets_10_31_2026.xlsx', sheet_name=1, header=3)
 TMPL = {str(a).strip(): str(b).strip() for a, b in zip(tmpl.iloc[:, 0], tmpl.iloc[:, 1]) if isinstance(a, str)}
@@ -178,14 +201,13 @@ def months_active(a):
     act = set()
     for gg in (maint, fcard, mil, hrs):
         if uid in gg: act |= {m for m in M if gg[uid][m - 1] != 0}
-    if not act and uid in set(D.Unit.dropna()):
-        act = {1, 2, 3}  # in service per March book, no activity found
+    be = book_end(uid) if isinstance(uid, int) else None
+    if be: act |= {1, be} if act else set(range(1, be + 1))   # on the books -> in service from Jan through its last book month
     return set(range(min(act), max(act) + 1)) if act else set()
 for a in A.values():
     a['active'] = sorted(months_active(a))
 
 # depreciation & registration / taxes
-book = D[D.Unit.notna()].groupby('Unit')['Depreciation Amount'].sum()
 book_cat = D[D.Unit.notna()].groupby('Unit')['Spend Category'].first()
 for uid, a in A.items():
     act = a['active']
@@ -197,10 +219,13 @@ for uid, a in A.items():
                 mi = (2026 - od.year) * 12 + (m - od.month)
                 if 0 <= mi < life: add(dep, uid, m, a['cost'] / life)
         a['fully_dep'] = bool(a['owned'] and a['cost'] and ((2026 - pd.to_datetime(a['orig']).year) * 12 + (10 - pd.to_datetime(a['orig']).month)) >= LIFE[a['cls']])
-    elif isinstance(uid, int) and uid in book.index:
+    elif isinstance(uid, int) and uid in BOOKM:
         life = 84 if 'Forklift' in str(book_cat[uid]) else 60
-        a['cost'] = round(float(book[uid]) * life, 2); a['costsrc'] = 'Implied from Mar-26 book depreciation'
-        for m in act: add(dep, uid, m, float(book[uid]))
+        first_bm = min(BOOKM[uid])
+        a['cost'] = round(BOOKM[uid][first_bm] * life, 2); a['costsrc'] = 'Implied from 2026 book depreciation'
+        be = book_end(uid)
+        for m in act:
+            if be is None or m <= be or BOOKM[uid].get(LAST_BM): add(dep, uid, m, book_amt(uid, m))
     if a['cost']:
         for m in act:
             add(tax, uid, m, a['cost'] * TAX_RATE)
@@ -208,7 +233,7 @@ for uid, a in A.items():
 
 # rolling tarp systems: match to their trailer (explicit trailer # in the description, else tarp # - 14000), add book depreciation + taxes
 tarp_rows = []
-TD = D[TARP & D.Unit.notna()].copy()
+TD = D[TARP & D.Unit.notna() & (D.BM == D.groupby('Unit').BM.transform('max'))].copy()   # latest record set per tarp
 TD['desc'] = TD['Asset ID'].astype(str).str.extract(r'\((.*)\)')[0].fillna('')
 for u, g in TD.groupby('Unit'):
     u = int(u); tamt = float(g['Depreciation Amount'].sum()); desc = '; '.join(sorted(set(g.desc)))
@@ -217,16 +242,18 @@ for u, g in TD.groupby('Unit'):
     tgt = int(m.group(1)) if m and int(m.group(1)) in A else (u - 14000 if cand and cand['cls'] == 'Trailer' and 'Flatbed' in str(cand['type'])
                                                                 and cand['store'] == g['store'].iloc[0] else None)
     if tgt:
-        a = A[tgt]; a.setdefault('tarps', []).append(str(u))
+        a = A[tgt]; a.setdefault('tarps', []).append(str(u)); te = book_end(u); te = 10 if te == LAST_BM else te
         for mth in a['active']:
-            add(dep, tgt, mth, tamt); add(tax, tgt, mth, tamt * 60 * TAX_RATE)
+            if mth <= te:
+                ba = book_amt(u, mth); add(dep, tgt, mth, ba); add(tax, tgt, mth, BOOKM[u][min(BOOKM[u])] * 60 * TAX_RATE)
         tarp_rows.append((u, tgt, a['store'], tamt, desc))
     else:
         st = g['store'].iloc[0]; ensure_store(st)
-        A[u] = dict(id=u, store=st, cls='Trailer', type='Rolling tarp / trailer equipment', make='', owned=True, cost=round(tamt * 60, 2),
-                    costsrc='Implied from Mar-26 book depreciation', orig='', status='In service (book only)', roster=False, active=list(M))
-        for mth in M:
-            add(dep, u, mth, tamt); add(tax, u, mth, tamt * 60 * TAX_RATE)
+        te = book_end(u); te = 10 if te == LAST_BM else te
+        A[u] = dict(id=u, store=st, cls='Trailer', type='Rolling tarp / trailer equipment', make='', owned=True, cost=round(BOOKM[u][min(BOOKM[u])] * 60, 2),
+                    costsrc='Implied from 2026 book depreciation', orig='', status='In service (book only)', roster=False, active=list(range(1, te + 1)))
+        for mth in range(1, te + 1):
+            add(dep, u, mth, book_amt(u, mth)); add(tax, u, mth, BOOKM[u][min(BOOKM[u])] * 60 * TAX_RATE)
         tarp_rows.append((u, None, st, tamt, desc))
 
 # onsite diesel -> trucks/LD at the site by that month's miles
@@ -299,7 +326,7 @@ def fmt(v): return f'${v:,.0f}'
 nr = [a for a in A.values() if not a['roster'] and not str(a['id']).startswith('RENT:')]
 issues = []
 issues.append(dict(cat='Assets', item='Units not on the 10/31 roster (disposed during 2026)', n=len(nr),
-    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the March 2026 book amount; original cost for reg/tax implied from book depreciation × life.',
+    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the 2026 monthly book amounts (Mar, May; latest prior file for each month) and stops when a unit drops off the books; original cost for reg/tax implied from book depreciation × life.',
     list=', '.join(str(a['id']) for a in sorted(nr, key=lambda x: str(x['id']))[:400])))
 nocost = [a for a in nr if not a['cost']]
 issues.append(dict(cat='Assets', item='Disposed units with no book record (no depreciation / reg / tax)', n=len(nocost), detail='Only actual spend and fuel are carried.', list=', '.join(str(a['id']) for a in nocost)))
