@@ -43,7 +43,8 @@ Mi.loc[~Mi['Store'].astype(str).str.fullmatch(r'\d{1,3}[A-Z]{0,2}'), 'Store'] = 
 H = hours()
 # monthly book depreciation files (month -> file); add more months here as they arrive
 BOOK_FILES = {3: ('eed968bc-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(sheet_name=1)),
-              5: ('ff2992e1-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6))}
+              5: ('ff2992e1-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6)),
+              9: ('809868e6-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6))}
 _bk = []
 for bm, (p, kw) in BOOK_FILES.items():
     x = pd.read_excel(U + p + '.xlsx', **kw); x = x[x['Asset ID'].notna()].copy(); x['BM'] = bm; _bk.append(x)
@@ -326,7 +327,7 @@ def fmt(v): return f'${v:,.0f}'
 nr = [a for a in A.values() if not a['roster'] and not str(a['id']).startswith('RENT:')]
 issues = []
 issues.append(dict(cat='Assets', item='Units not on the 10/31 roster (disposed during 2026)', n=len(nr),
-    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the 2026 monthly book amounts (Mar, May; latest prior file for each month) and stops when a unit drops off the books; original cost for reg/tax implied from book depreciation × life.',
+    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the 2026 monthly book amounts (Mar, May, Sep; latest prior file for each month) and stops when a unit drops off the books; original cost for reg/tax implied from book depreciation × life.',
     list=', '.join(str(a['id']) for a in sorted(nr, key=lambda x: str(x['id']))[:400])))
 nocost = [a for a in nr if not a['cost']]
 issues.append(dict(cat='Assets', item='Disposed units with no book record (no depreciation / reg / tax)', n=len(nocost), detail='Only actual spend and fuel are carried.', list=', '.join(str(a['id']) for a in nocost)))
