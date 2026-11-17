@@ -42,7 +42,8 @@ Mi = miles(); Mi['Store'] = Mi['Store'].map(sc)
 Mi.loc[~Mi['Store'].astype(str).str.fullmatch(r'\d{1,3}[A-Z]{0,2}'), 'Store'] = None  # telematics groups like 'Sale Pending'
 H = hours()
 # monthly book depreciation files (month -> file); add more months here as they arrive
-BOOK_FILES = {3: ('eed968bc-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(sheet_name=1)),
+BOOK_FILES = {2: ('dad2243f-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6)),
+              3: ('eed968bc-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(sheet_name=1)),
               4: ('6f419923-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6)),
               5: ('ff2992e1-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6)),
               6: ('a79a386a-BA_-_McCoys_Asset_Depreciation_Forecast_Fleet_Detail', dict(header=6)),
@@ -57,7 +58,7 @@ D['Unit'] = pd.to_numeric(D['Asset Identifier'], errors='coerce')
 BMS = sorted(BOOK_FILES); LAST_BM = BMS[-1]
 BOOKM = {}   # unit -> {book month: amount}
 for (u, bm), v in D[D.Unit.notna()].groupby(['Unit', 'BM'])['Depreciation Amount'].sum().items():
-    BOOKM.setdefault(int(u), {})[bm] = float(v)
+    if v > 0.005: BOOKM.setdefault(int(u), {})[bm] = float(v)   # net zero (e.g. disposal reversal) = off the books that month
 def book_amt(u, m):
     bm = BOOKM.get(u, {})
     if not bm: return 0.0
@@ -331,7 +332,7 @@ def fmt(v): return f'${v:,.0f}'
 nr = [a for a in A.values() if not a['roster'] and not str(a['id']).startswith('RENT:')]
 issues = []
 issues.append(dict(cat='Assets', item='Units not on the 10/31 roster (disposed during 2026)', n=len(nr),
-    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the 2026 monthly book amounts (Mar–Sep; latest prior file for each month) and stops when a unit drops off the books; original cost for reg/tax implied from book depreciation × life.',
+    detail='History kept in the months they had fuel, miles, spend or hours. Depreciation uses the 2026 monthly book amounts (Feb–Sep; January uses February) and stops when a unit drops off the books; original cost for reg/tax implied from book depreciation × life.',
     list=', '.join(str(a['id']) for a in sorted(nr, key=lambda x: str(x['id']))[:400])))
 nocost = [a for a in nr if not a['cost']]
 issues.append(dict(cat='Assets', item='Disposed units with no book record (no depreciation / reg / tax)', n=len(nocost), detail='Only actual spend and fuel are carried.', list=', '.join(str(a['id']) for a in nocost)))
