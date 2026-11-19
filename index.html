@@ -74,7 +74,8 @@ tbody tr.sel{background:#fff3a0}
 .clsT tr.subhead a.on{color:var(--green-ink);text-decoration:underline}
 .clsT tr.assetRow td{font-size:13px;color:var(--text-2)}
 .clsT td.trunc{max-width:130px;overflow:hidden;text-overflow:ellipsis}
-.clsT th,.clsT td{padding:7px 7px}
+.clsT th,.clsT td{padding:6px 5px;font-size:12.5px}
+#tblAst th,#tblAst td,#locAssets th,#locAssets td{padding:6px 6px;font-size:12.5px}
 .clsT th{white-space:normal;vertical-align:bottom}
 .clsT td:first-child{min-width:120px}
 tfoot td{font-weight:700;background:#eef2ea;border-top:2px solid var(--green)}
@@ -176,6 +177,7 @@ footer{max-width:1500px;margin:0 auto;padding:0 24px 30px;font-size:12px;color:v
         <li><b>Cost per hour</b> = shown separately for forklifts and TMFLs: each class's costs ÷ its own hours. Hours Jan–Aug are estimates (lifetime average); DVIR actuals start 8/24.</li>
         <li><b>Cost per asset-month</b> = trailer / ancillary cost ÷ active asset-months.</li>
         <li><b>Run rate</b> = average month in the selected range × 12.</li>
+        <li><b>Miles / hours per business day</b> = an asset's miles (trucks, LD) or hours (forklifts, TMFLs) ÷ business days in its active months, at 307 business days per year. Class rows average across active units.</li>
       </ul>
       <h3>Location &amp; activity</h3>
       <ul>
@@ -204,6 +206,8 @@ const COMPS = [
 const DEL_CLS = new Set(['Truck','LD Vehicle','Trailer','TMFL']);
 const isStore = s => /^\d+$/.test(s) && +s>=1 && +s<=121;   // 001 Galveston – 121 New Caney
 const isS2D = a => a.pk===1 && a.c==='LD Vehicle' && isStore(a.s);
+const BDAYS = 307;   // business days per year
+const ytdLbl = () => F.from===0 ? 'YTD ' : '';
 const MILE_CLS = new Set(['Truck','LD Vehicle']), HOUR_CLS = new Set(['Forklift','TMFL']);
 const CLASSES = ['Truck','LD Vehicle','Trailer','Forklift','TMFL','Ancillary Fleet'];
 DATA.assets.forEach(a=>{ a.regtax = a.reg.map((v,i)=>v+a.tax[i]); a.tot = a.maint.map((v,i)=>v+a.fuel_card[i]+a.onsite[i]+a.propane[i]+a.dep[i]+a.regtax[i]); });
@@ -429,7 +433,7 @@ function renderOverview(list){
     const unit = MILE_CLS.has(c)?'mile':HOUR_CLS.has(c)?'hour':c==='Unassigned'?'':'asset-month';
     const rate = MILE_CLS.has(c)?a.tcpm:HOUR_CLS.has(c)?a.cph:c==='Unassigned'?NaN:a.cpam;
     const AU=list.filter(x=>x.c===c&&ageUnits(x)).map(ageYrs).filter(isFinite); const age=AU.length?sum(AU)/AU.length:NaN;
-    return {_key:c,c,age,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate}; }).filter(Boolean);
+    return {_key:c,c,age,units:a.actOct,tot:a.tot,run:a.run,maint:a.comp.maint,fuel:a.comp.fuel_card+a.comp.onsite+a.comp.propane,fixed:a.comp.dep+a.comp.regtax,usage:MILE_CLS.has(c)?a.miles:HOUR_CLS.has(c)?a.hours:a.trlAM,unit,rate,pday:(()=>{ if(!(MILE_CLS.has(c)||HOUR_CLS.has(c))) return NaN; const am=sum(list.filter(x=>x.c===c&&!x.pseudo).map(x=>sum(MR().map(i=>x.act[i])))); const u=MILE_CLS.has(c)?a.miles:a.hours; return am&&u?u/(am*BDAYS/12):NaN; })()}; }).filter(Boolean);
   renderClassTable(list, crow);
 
 }
@@ -439,13 +443,14 @@ const OPEN_CLS = new Set();
 let clsSort = {k:'tot', asc:false};
 function renderClassTable(list, crow){
   const ms=MR();
-  const cols=[['c','Class / unit','l'],['t','Type','l'],['s','Loc','l'],['units','Active ('+MON[F.to]+') / mo'],['age','Age (yrs)'],['tot','Total cost'],['run','Run rate'],['maint','Maintenance'],['fuel','Fuel (all)'],['fixed','Depr+reg/tax'],['usage','Mi / hrs / asset-mo'],['rate','Rate']];
+  const cols=[['c','Class / unit','l'],['t','Type','l'],['s','Loc','l'],['units','Active ('+MON[F.to]+') / mo'],['age','Age (yrs)'],['tot','Total cost'],['run','Run rate'],['maint','Maintenance'],['fuel','Fuel (all)'],['fixed','Depr+reg/tax'],['usage',ytdLbl()+'Mi / hrs / asset-mo'],['pday','Per bus. day'],['rate','Rate']];
   const cell=(k,v,r)=>{
     if(k==='tot'||k==='run'||k==='maint'||k==='fuel'||k==='fixed') return fmt$(v);
     if(k==='age') return isFinite(v)?v.toFixed(1):'—';
     if(k==='usage') return v?fmtN(v):'—';
+    if(k==='pday') return isFinite(v)?v.toFixed(1)+(r.unit==='mile'?' mi':r.unit==='hour'?' hr':''):'—';
     if(k==='units') return fmtN(v);
-    if(k==='rate') return isFinite(v)?fmtR(v)+({mile:'/mi',hour:'/hr','asset-month':'/asset-mo'}[r.unit]||''):'—';
+    if(k==='rate') return isFinite(v)&&v!==0?fmtR(v)+({mile:'/mi',hour:'/hr','asset-month':'/asset-mo'}[r.unit]||''):'—';
     return v??'';
   };
   let h='<div class="tscroll" style="max-height:none"><table class="clsT"><thead><tr>'+cols.map(([k,n,l])=>`<th class="${l?'l':''}">${n}</th>`).join('')+'</tr></thead><tbody>';
@@ -457,8 +462,8 @@ function renderClassTable(list, crow){
       const unit=MILE_CLS.has(r.c)?'mile':HOUR_CLS.has(r.c)?'hour':'asset-month';
       const A=list.filter(x=>x.c===r.c && !x.pseudo).map(a=>{
         const g=k=>sum(ms.map(i=>a[k][i])); const tot=g('tot'), mi=g('mi'), hr=g('hr'), am=sum(ms.map(i=>a.act[i]));
-        const usage=MILE_CLS.has(r.c)?mi:HOUR_CLS.has(r.c)?hr:am;
-        return {id:a.id, t:a.t||'—', s:a.s, units:am, age:ageYrs(a), tot, run:am?tot/am*12:0, maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), fixed:g('dep')+g('regtax'), usage, unit, rate:usage?tot/usage:NaN, disp:!a.r, std:a.std, tarps:a.tarps, st:a.st};
+        const usage=MILE_CLS.has(r.c)?mi:HOUR_CLS.has(r.c)?hr:am; const pday=(MILE_CLS.has(r.c)||HOUR_CLS.has(r.c))&&am&&usage?usage/(am*BDAYS/12):NaN;
+        return {id:a.id, t:a.t||'—', s:a.s, units:am, age:ageYrs(a), tot, run:am?tot/am*12:0, maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), fixed:g('dep')+g('regtax'), usage, pday, unit, rate:usage?tot/usage:NaN, disp:!a.r, std:a.std, tarps:a.tarps, st:a.st};
       }).filter(x=>x.tot!==0||x.units>0||x.usage>0).sort((x,y)=>{ const k=clsSort.k; const p=x[k], q=y[k]; return typeof p==='string'? (clsSort.asc?p.localeCompare(q,undefined,{numeric:true}):q.localeCompare(p,undefined,{numeric:true})) : (clsSort.asc?(p||0)-(q||0):(q||0)-(p||0)); });
       h+=`<tr class="subhead"><td colspan="${cols.length}" class="l">${A.length.toLocaleString()} ${r.c} units · sort: `+
         [['tot','Total cost'],['rate','Rate'],['usage','Usage'],['age','Age'],['id','Unit #'],['t','Type'],['s','Location']].map(([k,n])=>`<a href="#" class="srt${clsSort.k===k?' on':''}" data-k="${k}">${n}${clsSort.k===k?(clsSort.asc?' ▴':' ▾'):''}</a>`).join(' · ')+
@@ -566,14 +571,16 @@ function assetRows(L){
     if(isS2D(a)) flags.push('<span class="pill">Store-to-door</span>');
     if(a.tarps) flags.push('<span class="pill" title="Rolling tarp '+a.tarps.join(', ')+' depreciation included">+ tarp '+a.tarps.join(', ')+'</span>');
     const rate = MILE_CLS.has(a.c)? (mi?tot/mi:NaN) : HOUR_CLS.has(a.c)? (hr?tot/hr:NaN) : NaN;
-    return {_key:a.id, id:a.id, s:a.s, c:a.c, age:ageYrs(a), t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, rate, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
+    const actm=sum(ms.map(i=>a.act[i])), bd=actm*BDAYS/12, use=MILE_CLS.has(a.c)?mi:HOUR_CLS.has(a.c)?hr:0;
+    const pday = bd&&use ? use/bd : NaN, punit = MILE_CLS.has(a.c)?' mi':HOUR_CLS.has(a.c)?' hr':'';
+    return {_key:a.id, id:a.id, s:a.s, c:a.c, age:ageYrs(a), t:a.t, mk:a.mk, cost:a.cost||0, months:sum(ms.map(i=>a.act[i])), maint:g('maint'), fuel:g('fuel_card')+g('onsite')+g('propane'), dep:g('dep'), regtax:g('regtax'), tot, mi, hr, use, rate, pday, punit, unit:MILE_CLS.has(a.c)?'/mi':HOUR_CLS.has(a.c)?'/hr':'', flags:flags.join(' ')};
   }).filter(r=>r.tot!==0||r.months>0||r.mi>0);
 }
 function assetTable(host, L){
   table(host,[
     {k:'id',n:'Unit',l:1},{k:'s',n:'Loc',l:1},{k:'c',n:'Class',l:1},{k:'t',n:'Type',l:1},{k:'mk',n:'Make',l:1},{k:'age',n:'Age (yrs)',f:v=>isFinite(v)?v.toFixed(1):'—'},{k:'cost',n:'Orig. cost',f:v=>v?fmt$(v):'—'},{k:'months',n:'Active mo'},
     {k:'maint',n:'Maint.',f:fmt$},{k:'fuel',n:'Fuel',f:fmt$},{k:'dep',n:'Depr.',f:fmt$},{k:'regtax',n:'Reg/tax',f:fmt$},{k:'tot',n:'Total',f:fmt$},
-    {k:'mi',n:'Miles',f:v=>v?fmtN(v):'—'},{k:'hr',n:'Hours',f:v=>v?fmtN(v):'—'},{k:'rate',n:'Cost / mi or hr',f:(v,r)=>isFinite(v)?fmtR(v)+r.unit:'—'},{k:'flags',n:'Flags',l:1}
+    {k:'use',n:ytdLbl()+'Miles / hours',f:(v,r)=>v?fmtN(v)+r.punit:'—'},{k:'pday',n:'Per bus. day',f:(v,r)=>isFinite(v)?v.toFixed(1)+r.punit:'—',title:'Miles or hours ÷ business days in its active months (307 per year)'},{k:'rate',n:'Cost / mi or hr',f:(v,r)=>isFinite(v)?fmtR(v)+r.unit:'—'},{k:'flags',n:'Flags',l:1}
   ], assetRows(L), {sortKey:'tot', limit:300});
 }
 function renderAssets(list){
